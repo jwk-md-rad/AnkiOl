@@ -71,6 +71,7 @@ async function route() {
   try {
     if (!parts.length) return await homeView();
     if (parts[0] === 'settings') return await settingsView();
+    if (parts[0] === 'uitleg') return await helpView(Number(parts[1]) || 0);
     if (parts[0] === 'deck' && parts[1]) {
       const deck = await db.getDeck(parts[1]);
       if (!deck) return (location.hash = '#/');
@@ -92,6 +93,8 @@ window.addEventListener('hashchange', route);
 
 async function homeView() {
   const decks = await db.listDecks();
+  // Eerste keer: meteen de uitleg laten zien.
+  if (!decks.length && !(await db.getMeta('seenHelp', false))) return (location.hash = '#/uitleg');
   const cards = await db.allCards();
   const now = Date.now();
   const rows = decks
@@ -115,7 +118,7 @@ async function homeView() {
 
   render(`
     <section class="panel">
-      <h2>Mijn lijsten</h2>
+      <div class="row spread"><h2>Mijn lijsten</h2><a href="#/uitleg" class="help-link">❓ Hoe werkt het?</a></div>
       ${rows || '<p class="muted">Nog geen lijsten. Maak hieronder je eerste lijst aan.</p>'}
       <form id="newDeck" class="row">
         <input name="name" placeholder="Naam nieuwe lijst, bv. Engels H3" required maxlength="80">
@@ -716,6 +719,96 @@ async function studyView(deck, cards, { mode, dir, cram, newLeft }) {
     if ('speechSynthesis' in window) speechSynthesis.cancel();
   };
   next();
+}
+
+// ---------- Uitleg ----------
+
+const HELP_STEPS = [
+  {
+    emoji: '👋',
+    title: 'Hoi!',
+    text: 'Met deze app leer je je woordjes. <b>Elke dag 10 minuten</b> = klaar voor de toets.',
+  },
+  {
+    emoji: '📚',
+    title: 'Maak een lijst',
+    text: 'Typ een naam, bijvoorbeeld <b>Engels H4</b>.',
+    demo: '<span class="demo-input">Engels H4</span><span class="demo-btn primary">+ Lijst maken</span>',
+  },
+  {
+    emoji: '📷',
+    title: 'Foto van je boek',
+    text: 'Open je lijst. Tik op <b>Foto → kaartjes</b>.<br>Foto <b>recht</b> en <b>scherp</b>.',
+    demo: '<span class="demo-btn">📷 Foto → kaartjes</span>',
+  },
+  {
+    emoji: '✅',
+    title: 'Klopt het?',
+    text: 'Fout woord? Tik erop en verbeter.<br>Niet leren? Vinkje weg.',
+    demo: '<span class="demo-check">☑ house · huis</span><span class="demo-check off">☐ Unit 4</span>',
+  },
+  {
+    emoji: '▶️',
+    title: 'Overhoren',
+    text: 'Kies: <b>Omdraaien</b> (in je hoofd) of <b>Intypen</b>.',
+    demo: '<span class="demo-btn primary">▶ Overhoren</span>',
+  },
+  {
+    emoji: '🤔',
+    title: 'Hoe goed wist je het?',
+    text: 'Wees eerlijk! De app regelt de rest.',
+    demo: `<div class="demo-rates">
+      <span class="rate again">Opnieuw<small>wist ik niet</small></span>
+      <span class="rate hard">Moeilijk<small>met moeite</small></span>
+      <span class="rate good">Goed<small>wist ik</small></span>
+      <span class="rate easy">Makkelijk<small>te makkelijk</small></span></div>`,
+  },
+  {
+    emoji: '🔁',
+    title: 'Waarom elke dag?',
+    text: 'Weet je het? Dan komt het woord <b>later</b> terug.<br>Fout? Dan komt het <b>snel</b> terug.',
+  },
+  {
+    emoji: '🚀',
+    title: 'Toets morgen?',
+    text: 'Vink <b>Alles oefenen</b> aan. Dan komen alle woordjes langs.',
+    demo: '<span class="demo-check">☑ Alles oefenen</span>',
+  },
+  {
+    emoji: '⌨️',
+    title: 'Sneller met toetsen',
+    text: '<kbd>spatie</kbd> = omdraaien<br><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <kbd>4</kbd> = knoppen',
+  },
+];
+
+async function helpView(i) {
+  i = Math.min(Math.max(0, i), HELP_STEPS.length - 1);
+  const step = HELP_STEPS[i];
+  const last = i === HELP_STEPS.length - 1;
+  await db.setMeta('seenHelp', true);
+  render(`
+    <section class="panel help">
+      <a href="#/" class="help-skip">Overslaan ✕</a>
+      <div class="help-emoji">${step.emoji}</div>
+      <h2>${step.title}</h2>
+      <p class="help-text">${step.text}</p>
+      ${step.demo ? `<div class="help-demo">${step.demo}</div>` : ''}
+      <div class="help-dots">${HELP_STEPS.map((_, j) => `<a href="#/uitleg/${j}" class="${j === i ? 'on' : ''}" aria-label="Stap ${j + 1}"></a>`).join('')}</div>
+      <div class="help-nav ${i ? '' : 'first'}">
+        ${i ? `<a class="button big" href="#/uitleg/${i - 1}">←</a>` : ''}
+        ${last ? '<a class="button primary big" href="#/">Aan de slag! 🚀</a>' : `<a class="button primary big" href="#/uitleg/${i + 1}">Volgende →</a>`}
+      </div>
+    </section>`);
+  const onKey = (e) => {
+    if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'Enter') {
+      e.preventDefault();
+      location.hash = last ? '#/' : `#/uitleg/${i + 1}`;
+    } else if (e.key === 'ArrowLeft' && i) {
+      location.hash = `#/uitleg/${i - 1}`;
+    }
+  };
+  document.addEventListener('keydown', onKey);
+  cleanup = () => document.removeEventListener('keydown', onKey);
 }
 
 // ---------- Instellingen ----------
