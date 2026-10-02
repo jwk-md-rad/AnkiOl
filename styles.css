@@ -193,6 +193,19 @@ kbd { font-size: 0.7rem; opacity: 0.7; border: 1px solid currentColor; border-ra
 .crop-rect { position: absolute; border: 3px solid var(--primary); box-shadow: 0 0 0 9999px rgba(0,0,0,.45); pointer-events: none; }
 .thumb .row button { padding: 6px 10px; }
 
+/* Stones */
+.badge { display: inline-block; font-size: 0.8rem; font-weight: 600; padding: 1px 8px; border-radius: 999px; background: color-mix(in srgb, var(--primary) 14%, transparent); color: var(--primary); white-space: nowrap; }
+.stone-cell { padding: 8px 6px !important; }
+.stone-ex { border-top: 1px solid var(--line); padding: 10px 0; }
+.stone-ex.off { opacity: .45; }
+.stone-ex ul { margin: 6px 0 0; padding-left: 26px; }
+.stone-ex li { margin: 2px 0; }
+.stone-q { font-size: clamp(1.4rem, 3.4vw, 2rem); }
+.stone-a { font-size: clamp(1.3rem, 3vw, 1.8rem); }
+.gap { display: inline-block; min-width: 3em; border-bottom: 3px solid var(--primary); color: var(--primary); }
+.filled { color: var(--good); text-decoration: underline; }
+.paper { font-size: 1.1rem; margin: 0 0 16px; }
+
 /* Uitleg */
 .top-links { display: flex; gap: 4px; }
 .help-link { text-decoration: none; font-weight: 600; }

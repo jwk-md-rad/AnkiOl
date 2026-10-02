@@ -1,9 +1,10 @@
 import * as db from './db.js';
 import { previewLabels, AGAIN, HARD, GOOD, EASY, formatMs } from './srs.js';
-import { Session, countDue } from './session.js';
+import { Session, countDue, nextVariant } from './session.js';
 import { checkAnswer, normalize } from './check.js';
 import { pairsFromText } from './parse.js';
 import { loadImage, toCanvas, canvasToBase64Jpeg, isHeic, isImageFile } from './image.js';
+import { STONE_TYPES } from './claude.js';
 
 const $app = document.getElementById('app');
 const LANGS = { en: 'Engels', nl: 'Nederlands', fr: 'Frans', de: 'Duits' };
@@ -84,6 +85,7 @@ async function route() {
       const deck = await db.getDeck(parts[1]);
       if (!deck) return (location.hash = '#/');
       if (parts[2] === 'photo') return await photoView(deck);
+      if (parts[2] === 'stone') return await photoView(deck, 'stone');
       if (parts[2] === 'add') return await addView(deck);
       if (parts[2] === 'study') return await studySetupView(deck);
       return await deckView(deck);
@@ -196,6 +198,7 @@ async function deckView(deck) {
       <div class="actions">
         <a class="button primary big" href="#/deck/${deck.id}/study">▶ Overhoren</a>
         <a class="button big" href="#/deck/${deck.id}/photo">📷 Foto → kaartjes</a>
+        <a class="button big" href="#/deck/${deck.id}/stone">📘 Stone → oefeningen</a>
         <a class="button big" href="#/deck/${deck.id}/add">✎ Typen / plakken</a>
       </div>
     </section>
@@ -211,8 +214,11 @@ async function deckView(deck) {
           .map(
             (card) => `
           <tr data-id="${card.id}">
-            <td><input class="f" value="${esc(card.front)}"></td>
-            <td><input class="b" value="${esc(card.back)}"></td>
+            ${
+              card.kind === 'stone'
+                ? `<td class="stone-cell"><span class="badge">📘 ${esc(STONE_TYPES[card.type])}</span> ${esc(card.front)}</td><td class="stone-cell">${esc(card.back)} <small class="muted">(${card.variants.length} varianten)</small></td>`
+                : `<td><input class="f" value="${esc(card.front)}"></td><td><input class="b" value="${esc(card.back)}"></td>`
+            }
             <td class="muted">${nextLabel(card)}</td>
             <td><button class="icon del" title="Verwijderen">✕</button></td>
           </tr>`
@@ -385,7 +391,8 @@ async function addView(deck) {
 
 // ---------- Foto → kaartjes ----------
 
-async function photoView(deck) {
+async function photoView(deck, mode = 'words') {
+  const stoneMode = mode === 'stone';
   const { apiKey, model } = await settings.get();
   const existing = await db.listCards(deck.id);
   const photos = []; // { bitmap, rotate, crop }
@@ -394,8 +401,15 @@ async function photoView(deck) {
   render(`
     <nav class="crumbs"><a href="#/deck/${deck.id}">← ${esc(deck.name)}</a></nav>
     <section class="panel" id="drop">
-      <h2>Foto → kaartjes</h2>
-      <p class="muted">Maak een scherpe, rechte foto van de woordjes in je boek. Meer pagina's? Kies meerdere foto's.</p>
+      ${
+        stoneMode
+          ? `<h2>📘 Stone → oefeningen</h2>
+      <p class="muted">Maak een foto van een Stone (het schema met zinsdelen in vakjes). Claude maakt er oefenzinnen van met steeds andere namen, datums en woorden.
+      Je schrijft je antwoord op papier en kijkt daarna zelf na.</p>
+      ${apiKey ? '' : '<p class="panel error">Hiervoor is Claude nodig. Vul eerst een API-sleutel in bij <a href="#/settings">⚙ Instellingen</a>.</p>'}`
+          : `<h2>Foto → kaartjes</h2>
+      <p class="muted">Maak een scherpe, rechte foto van de woordjes in je boek. Meer pagina's? Kies meerdere foto's.</p>`
+      }
       <div class="row">
         <label class="button big primary">🖼 Foto kiezen<input id="file" type="file" accept="image/*,.heic,.heif" multiple hidden></label>
         <button id="cam" class="big">📷 Camera</button>
@@ -415,13 +429,13 @@ async function photoView(deck) {
       <div id="preview" hidden>
         <div id="thumbs" class="thumbs"></div>
         <div class="row">
-          <label>Herkennen met
+          <label ${stoneMode ? 'hidden' : ''}>Herkennen met
             <select id="method">
               <option value="claude" ${apiKey ? 'selected' : 'disabled'}>${modelName(model)}${apiKey ? '' : ' – stel eerst een API-sleutel in'}</option>
               <option value="ocr" ${apiKey ? '' : 'selected'}>Gratis tekstherkenning (OCR)</option>
             </select>
           </label>
-          <button id="run" class="primary big">Maak kaartjes</button>
+          <button id="run" class="primary big" ${stoneMode && !apiKey ? 'disabled' : ''}>${stoneMode ? 'Maak oefeningen' : 'Maak kaartjes'}</button>
         </div>
         <div id="progress" class="muted"></div>
       </div>
@@ -452,7 +466,8 @@ async function photoView(deck) {
       box.appendChild(tile);
     });
     document.getElementById('preview').hidden = !photos.length;
-    document.getElementById('run').textContent = photos.length > 1 ? `Maak kaartjes (${photos.length} foto's)` : 'Maak kaartjes';
+    const label = stoneMode ? 'Maak oefeningen' : 'Maak kaartjes';
+    document.getElementById('run').textContent = photos.length > 1 ? `${label} (${photos.length} foto's)` : label;
   };
   const addFiles = async (files) => {
     for (const file of files) {
@@ -517,6 +532,23 @@ async function photoView(deck) {
     const method = document.getElementById('method').value;
     btn.disabled = true;
     document.getElementById('review').innerHTML = '';
+    if (stoneMode) {
+      try {
+        progress.textContent = `${modelName(model)} maakt oefeningen… (duurt ongeveer 30–90 seconden)`;
+        const { claudeStone } = await import('./claude.js');
+        const jpegs = photos.map(({ bitmap, rotate, crop }) => canvasToBase64Jpeg(toCanvas(bitmap, 1800, { rotate, crop })));
+        const stone = await claudeStone(jpegs, apiKey, { model });
+        progress.textContent = stone.exercises.length ? `${stone.exercises.length} oefeningen gemaakt.` : 'Geen Stone gevonden op de foto.';
+        if (stone.exercises.length) document.getElementById('review').appendChild(stoneReview(deck, stone));
+      } catch (err) {
+        console.error(err);
+        progress.textContent = '';
+        toast(friendlyError(err), 'bad');
+      } finally {
+        btn.disabled = false;
+      }
+      return;
+    }
     const rows = [];
     try {
       for (let i = 0; i < photos.length; i++) {
@@ -549,6 +581,42 @@ async function photoView(deck) {
       btn.disabled = false;
     }
   };
+}
+
+// Controlescherm voor door Claude gemaakte Stone-oefeningen.
+function stoneReview(deck, stone) {
+  const box = document.createElement('section');
+  box.className = 'panel';
+  const count = () => stone.exercises.filter((e) => e.ok).length;
+  box.innerHTML = `
+    <h3>${esc(stone.title)}</h3>
+    <p class="muted">Vink uit wat je niet wilt oefenen. Bij elke herhaling komt een andere variant.</p>
+    ${stone.exercises
+      .map(
+        (e, i) => `
+      <div class="stone-ex" data-i="${i}">
+        <label class="inline"><input type="checkbox" class="ok" checked> <span class="badge">📘 ${esc(STONE_TYPES[e.type])}</span> <small class="muted">${esc(e.pattern)}</small></label>
+        <ul>${e.variants.map((v) => `<li>${esc(v.prompt)} <span class="muted">→</span> <b>${esc(v.answer)}</b></li>`).join('')}</ul>
+      </div>`
+      )
+      .join('')}
+    <div class="row end"><button type="button" class="primary big save">${count()} oefeningen opslaan</button></div>`;
+  box.addEventListener('change', (e) => {
+    if (!e.target.classList.contains('ok')) return;
+    const div = e.target.closest('.stone-ex');
+    stone.exercises[div.dataset.i].ok = e.target.checked;
+    div.classList.toggle('off', !e.target.checked);
+    const btn = box.querySelector('.save');
+    btn.textContent = `${count()} oefeningen opslaan`;
+    btn.disabled = !count();
+  });
+  box.querySelector('.save').onclick = async () => {
+    const keep = stone.exercises.filter((e) => e.ok);
+    await db.putCards(keep.map((e) => db.makeStoneCard(deck.id, stone.title, e)));
+    toast(`${keep.length} Stone-oefeningen toegevoegd`, 'ok');
+    location.hash = `#/deck/${deck.id}`;
+  };
+  return box;
 }
 
 // Laat de gebruiker een rechthoek trekken om de woordjes. Geeft de uitsnede
@@ -698,6 +766,10 @@ async function studyView(deck, cards, { mode, dir, cram, newLeft }) {
   let item = null;
   let phase = 'question';
   let suggested = GOOD;
+  let variant = 0;
+  const isStone = () => item && item.card.kind === 'stone';
+  // Stone-oefeningen schrijf je op papier: altijd omdraaien, ook in de intyp-sessie.
+  const curMode = () => (isStone() ? 'flip' : mode);
 
   render(`
     <nav class="crumbs"><a href="#/deck/${deck.id}">← Stoppen</a><span id="counts" class="counts"></span></nav>
@@ -725,6 +797,7 @@ async function studyView(deck, cards, { mode, dir, cram, newLeft }) {
     showCounts();
     if (!item) return done();
     phase = 'question';
+    if (isStone()) return nextStone();
     const qLang = langOf(item.dir, 'q');
     const aLang = langOf(item.dir, 'a');
     const isNew = item.card[item.dir].state === 'new';
@@ -750,6 +823,37 @@ async function studyView(deck, cards, { mode, dir, cram, newLeft }) {
     if (speakOn && qLang !== 'nl') speak(question(), qLang);
   }
 
+  // Stone-oefening: opdracht tonen, antwoord op papier schrijven.
+  function nextStone() {
+    variant = nextVariant(item.card);
+    const v = item.card.variants[variant];
+    const english = item.card.type !== 'translate';
+    const isNew = item.card.fwd.state === 'new';
+    const promptHtml = esc(v.prompt).replace(/_{2,}/g, '<span class="gap">&nbsp;?&nbsp;</span>');
+    $s.innerHTML = `
+      <div class="card-label muted">📘 ${esc(item.card.stone || 'Stone')} · <b>${esc(STONE_TYPES[item.card.type])}</b>${isNew ? ' · <span class="c-new">nieuw</span>' : ''}</div>
+      <div class="q stone-q">${promptHtml} ${english ? speakBtn(v.prompt.replace(/_{2,}/g, '…'), 'en') : ''}</div>
+      <p class="paper">✍️ Schrijf je antwoord op papier.</p>
+      <button id="flip" class="primary big">Toon antwoord <kbd>spatie</kbd></button>
+      <div id="answer"></div>`;
+    document.getElementById('flip').onclick = () => reveal(null);
+  }
+
+  function stoneAnswerHtml() {
+    const c = item.card;
+    const v = c.variants[variant];
+    const main =
+      c.type === 'gap'
+        ? esc(v.prompt.replace(/\s*\([^)]*\)\s*$/, '')).replace(/_{2,}/g, `<b class="filled">${esc(v.answer)}</b>`)
+        : esc(v.answer);
+    const spoken = c.type === 'gap' ? v.prompt.replace(/\s*\([^)]*\)\s*$/, '').replace(/_{2,}/g, v.answer) : v.answer;
+    return `
+      <div class="a stone-a">${main} ${speakBtn(spoken, 'en')}</div>
+      ${c.type === 'answer' ? '<p class="muted center">Voorbeeld. Jouw antwoord mag over jezelf gaan: klopt de zinsbouw?</p>' : ''}
+      ${v.alternatives.length ? `<p class="center">Ook goed: ${v.alternatives.map((a) => `<b>${esc(a)}</b>`).join(' · ')}</p>` : ''}
+      <p class="muted center small">Zinsbouw: ${esc(c.pattern)}</p>`;
+  }
+
   function reveal(typed) {
     phase = 'answer';
     const aLang = langOf(item.dir, 'a');
@@ -770,12 +874,12 @@ async function studyView(deck, cards, { mode, dir, cram, newLeft }) {
     document.getElementById('answer').innerHTML = `
       ${verdict}
       <hr>
-      <div class="a">${esc(answerText())} ${speakBtn(answerText(), aLang)}</div>
+      ${isStone() ? stoneAnswerHtml() : `<div class="a">${esc(answerText())} ${speakBtn(answerText(), aLang)}</div>`}
       ${typed !== null ? '<p class="muted center">Enter = voorgestelde knop. Klopt het oordeel niet? Kies zelf.</p>' : '<p class="muted center">Hoe goed wist je het?</p>'}
       <div class="rates">
         ${btn(AGAIN, 'Opnieuw', 'again')}${btn(HARD, 'Moeilijk', 'hard')}${btn(GOOD, 'Goed', 'good')}${btn(EASY, 'Makkelijk', 'easy')}
       </div>`;
-    if (speakOn && aLang !== 'nl' && typed === null) speak(answerText(), aLang);
+    if (speakOn && aLang !== 'nl' && typed === null && !isStone()) speak(answerText(), aLang);
     $s.querySelector('.rates').onclick = (e) => {
       const b = e.target.closest('.rate');
       if (b) rate(Number(b.dataset.r));
@@ -786,6 +890,7 @@ async function studyView(deck, cards, { mode, dir, cram, newLeft }) {
   async function rate(r) {
     if (phase !== 'answer') return;
     phase = 'saving';
+    if (isStone()) item.card.lastVariant = variant;
     const { wasNew } = session.answer(item, r);
     if (!cram) {
       await db.putCards([item.card]);
@@ -816,15 +921,15 @@ async function studyView(deck, cards, { mode, dir, cram, newLeft }) {
   const onKey = (e) => {
     if (!item) return;
     const typing = e.target.tagName === 'INPUT';
-    if (phase === 'question' && mode === 'flip' && (e.key === ' ' || e.key === 'Enter')) {
+    if (phase === 'question' && curMode() === 'flip' && (e.key === ' ' || e.key === 'Enter')) {
       e.preventDefault();
       reveal(null);
     } else if (phase === 'answer' && !typing && ['1', '2', '3', '4'].includes(e.key)) {
       rate(Number(e.key));
-    } else if (phase === 'answer' && e.key === 'Enter' && mode === 'type') {
+    } else if (phase === 'answer' && e.key === 'Enter' && curMode() === 'type') {
       e.preventDefault();
       rate(suggested);
-    } else if (phase === 'answer' && e.key === ' ' && mode === 'flip') {
+    } else if (phase === 'answer' && e.key === ' ' && curMode() === 'flip') {
       e.preventDefault();
       rate(GOOD);
     }
@@ -861,6 +966,11 @@ const HELP_STEPS = [
     emoji: '📱',
     title: 'Foto met je iPhone?',
     text: 'Mail hem naar jezelf.<br>Download hem op de Chromebook.<br>Tik op <b>Foto kiezen</b>.',
+  },
+  {
+    emoji: '📘',
+    title: 'Stones',
+    text: 'Foto van een Stone? Tik op <b>Stone → oefeningen</b>.<br>De app verzint zinnen.<br>Jij schrijft het antwoord <b>op papier</b>.',
   },
   {
     emoji: '✅',

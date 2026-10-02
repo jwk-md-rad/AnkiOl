@@ -6,6 +6,7 @@ Een AnkiWeb-achtige app om woordjes en zinnen te overhoren (Engels ↔ Nederland
   - *Gratis tekstherkenning* (Tesseract OCR, in de browser): herkent kolommen zoals `the teacher    de leraar` of `house - huis`.
   - *Claude AI* (optioneel, met eigen Anthropic API-sleutel): beter in lastige layouts, voorbeeldzinnen, fonetisch schrift weglaten en EN/NL automatisch op de goede kant zetten.
 - Woordjes per **hoofdstuk** (bijvoorbeeld *Engels H4*), zoals in het leerboek.
+- **Stones** (zinsbouw-schema's uit Stepping Stones): foto uploaden → Claude verzint oefenzinnen (Nederlands → Engels vertalen, vraag beantwoorden, gatenzin) met steeds andere namen, datums en woorden. Antwoord op papier schrijven, omdraaien, zelf nakijken. Elke herhaling een andere variant. Vereist een Claude API-sleutel (schatting: ± 10–25 cent per Stone met Opus, ± 5–12 met Sonnet).
 - **Spaced repetition** zoals Anki (SM-2): nieuwe woordjes komen terug na 1 en 10 minuten, daarna na 1 dag, en steeds langere tijd zolang je ze goed weet. Fout = vaker oefenen.
 - **Per sessie kiezen**: *omdraaien en zelf beoordelen* (Opnieuw / Moeilijk / Goed / Makkelijk) of *antwoord intypen* (tolerant voor hoofdletters, accenten, lidwoorden en kleine typfouten).
 - Richting kiezen: Engels → Nederlands, Nederlands → Engels of beide (elke richting heeft een eigen planning).

@@ -74,6 +74,25 @@ export function makeCard(deckId, front, back) {
   return { id: uid(), deckId, front, back, created: Date.now(), fwd: newState(), rev: newState() };
 }
 
+// Stone-oefening: één kaartje met meerdere varianten (prompt → antwoord).
+export function makeStoneCard(deckId, stone, exercise) {
+  const first = exercise.variants[0];
+  return {
+    id: uid(),
+    deckId,
+    kind: 'stone',
+    stone,
+    type: exercise.type,
+    pattern: exercise.pattern,
+    variants: exercise.variants,
+    front: first.prompt,
+    back: first.answer,
+    created: Date.now(),
+    fwd: newState(),
+    rev: newState(),
+  };
+}
+
 export async function putCards(cards) {
   await tx(['cards'], 'readwrite', (t) => {
     for (const c of cards) t.objectStore('cards').put(c);
