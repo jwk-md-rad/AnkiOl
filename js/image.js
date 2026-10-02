@@ -1,8 +1,39 @@
 // Foto inlezen, verkleinen en eventueel grijs maken.
 
+// iPhones bewaren foto's als HEIC; Chrome kan dat niet zelf openen.
+const HEIC2ANY_URL = 'https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js';
+
+export function isHeic(file) {
+  return /heic|heif/i.test(file.type) || /\.(heic|heif)$/i.test(file.name || '');
+}
+
+export function isImageFile(file) {
+  return /^image\//.test(file.type) || isHeic(file);
+}
+
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload = resolve;
+    s.onerror = () => reject(new Error('Kon de iPhone-foto niet omzetten. Ben je online?'));
+    document.head.appendChild(s);
+  });
+}
+
+async function heicToJpeg(file) {
+  if (!window.heic2any) await loadScript(HEIC2ANY_URL);
+  const out = await window.heic2any({ blob: file, toType: 'image/jpeg', quality: 0.9 });
+  return Array.isArray(out) ? out[0] : out;
+}
+
 export async function loadImage(file) {
-  const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
-  return bitmap;
+  try {
+    return await createImageBitmap(file, { imageOrientation: 'from-image' });
+  } catch (err) {
+    if (!isHeic(file)) throw err;
+    return createImageBitmap(await heicToJpeg(file));
+  }
 }
 
 export function toCanvas(bitmap, maxSide, { grayscale = false, rotate = 0 } = {}) {

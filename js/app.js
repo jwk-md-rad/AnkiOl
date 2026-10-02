@@ -3,7 +3,7 @@ import { previewLabels, AGAIN, HARD, GOOD, EASY, formatMs } from './srs.js';
 import { Session, countDue } from './session.js';
 import { checkAnswer, normalize } from './check.js';
 import { pairsFromText } from './parse.js';
-import { loadImage, toCanvas, canvasToBase64Jpeg } from './image.js';
+import { loadImage, toCanvas, canvasToBase64Jpeg, isHeic, isImageFile } from './image.js';
 
 const $app = document.getElementById('app');
 const LANGS = { en: 'Engels', nl: 'Nederlands', fr: 'Frans', de: 'Duits' };
@@ -380,28 +380,32 @@ async function addView(deck) {
 async function photoView(deck) {
   const { apiKey } = await settings.get();
   const existing = await db.listCards(deck.id);
-  let bitmap = null;
-  let rotate = 0;
+  const photos = []; // { bitmap, rotate }
   let stream = null;
 
   render(`
     <nav class="crumbs"><a href="#/deck/${deck.id}">← ${esc(deck.name)}</a></nav>
-    <section class="panel">
+    <section class="panel" id="drop">
       <h2>Foto → kaartjes</h2>
-      <p class="muted">Maak een scherpe, rechte foto van de woordenlijst in je leerboek, of kies een foto die je al hebt.</p>
+      <p class="muted">Maak een scherpe, rechte foto van de woordjes in je boek. Meer pagina's? Kies meerdere foto's.</p>
       <div class="row">
-        <label class="button big">🖼 Foto kiezen<input id="file" type="file" accept="image/*" hidden></label>
+        <label class="button big primary">🖼 Foto kiezen<input id="file" type="file" accept="image/*,.heic,.heif" multiple hidden></label>
         <button id="cam" class="big">📷 Camera</button>
       </div>
+      <details class="iphone">
+        <summary>📱 Foto gemaakt met je iPhone?</summary>
+        <ol>
+          <li>Mail de foto naar jezelf.</li>
+          <li>Open de mail op de Chromebook en <b>download</b> de foto.</li>
+          <li>Tik hier op <b>Foto kiezen</b> → map <b>Downloads</b>.</li>
+        </ol>
+      </details>
       <div id="camBox" hidden>
         <video id="video" autoplay playsinline></video>
-        <div class="row"><button id="snap" class="primary big">Foto maken</button><button id="camStop">Annuleren</button></div>
+        <div class="row"><button id="snap" class="primary big">Foto maken</button><button id="camStop">Klaar</button></div>
       </div>
       <div id="preview" hidden>
-        <canvas id="canvas"></canvas>
-        <div class="row">
-          <button id="rotL">⟲ Draai</button><button id="rotR">⟳ Draai</button>
-        </div>
+        <div id="thumbs" class="thumbs"></div>
         <div class="row">
           <label>Herkennen met
             <select id="method">
@@ -416,27 +420,70 @@ async function photoView(deck) {
     </section>
     <div id="review"></div>`);
 
-  const canvas = document.getElementById('canvas');
-  const drawPreview = () => {
-    const c = toCanvas(bitmap, 1200, { rotate });
-    canvas.width = c.width;
-    canvas.height = c.height;
-    canvas.getContext('2d').drawImage(c, 0, 0);
-    document.getElementById('preview').hidden = false;
+  const progress = document.getElementById('progress');
+  const drawThumbs = () => {
+    const box = document.getElementById('thumbs');
+    box.innerHTML = '';
+    photos.forEach((ph, i) => {
+      const tile = document.createElement('div');
+      tile.className = 'thumb';
+      tile.appendChild(toCanvas(ph.bitmap, 900, { rotate: ph.rotate }));
+      const bar = document.createElement('div');
+      bar.className = 'row';
+      bar.innerHTML = `<button data-act="l" title="Draai links">⟲</button><button data-act="r" title="Draai rechts">⟳</button><button data-act="x" class="danger" title="Weghalen">✕</button>`;
+      bar.onclick = (e) => {
+        const act = e.target.dataset.act;
+        if (act === 'l') ph.rotate = (ph.rotate + 270) % 360;
+        if (act === 'r') ph.rotate = (ph.rotate + 90) % 360;
+        if (act === 'x') photos.splice(i, 1);
+        if (act) drawThumbs();
+      };
+      tile.appendChild(bar);
+      box.appendChild(tile);
+    });
+    document.getElementById('preview').hidden = !photos.length;
+    document.getElementById('run').textContent = photos.length > 1 ? `Maak kaartjes (${photos.length} foto's)` : 'Maak kaartjes';
+  };
+  const addFiles = async (files) => {
+    for (const file of files) {
+      if (!isImageFile(file)) continue;
+      try {
+        progress.textContent = isHeic(file) ? 'iPhone-foto omzetten…' : '';
+        photos.push({ bitmap: await loadImage(file), rotate: 0 });
+      } catch (err) {
+        console.error(err);
+        toast(`Kan "${file.name}" niet openen`, 'bad');
+      }
+    }
+    progress.textContent = '';
+    drawThumbs();
   };
   const stopCam = () => {
     if (stream) stream.getTracks().forEach((t) => t.stop());
     stream = null;
     document.getElementById('camBox').hidden = true;
   };
-  cleanup = stopCam;
+  const onPaste = (e) => addFiles([...(e.clipboardData?.files || [])]);
+  document.addEventListener('paste', onPaste);
+  cleanup = () => {
+    stopCam();
+    document.removeEventListener('paste', onPaste);
+  };
 
+  const drop = document.getElementById('drop');
+  drop.ondragover = (e) => {
+    e.preventDefault();
+    drop.classList.add('dragging');
+  };
+  drop.ondragleave = () => drop.classList.remove('dragging');
+  drop.ondrop = (e) => {
+    e.preventDefault();
+    drop.classList.remove('dragging');
+    addFiles([...e.dataTransfer.files]);
+  };
   document.getElementById('file').onchange = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    bitmap = await loadImage(file);
-    rotate = 0;
-    drawPreview();
+    await addFiles([...e.target.files]);
+    e.target.value = '';
   };
   document.getElementById('cam').onclick = async () => {
     try {
@@ -451,47 +498,40 @@ async function photoView(deck) {
   };
   document.getElementById('camStop').onclick = stopCam;
   document.getElementById('snap').onclick = async () => {
-    const video = document.getElementById('video');
-    bitmap = await createImageBitmap(video);
-    rotate = 0;
-    stopCam();
-    drawPreview();
-  };
-  document.getElementById('rotL').onclick = () => {
-    rotate = (rotate + 270) % 360;
-    drawPreview();
-  };
-  document.getElementById('rotR').onclick = () => {
-    rotate = (rotate + 90) % 360;
-    drawPreview();
+    photos.push({ bitmap: await createImageBitmap(document.getElementById('video')), rotate: 0 });
+    drawThumbs();
+    toast('Foto toegevoegd. Nog een pagina? Maak nog een foto.', 'ok');
   };
   document.getElementById('run').onclick = async (e) => {
     const btn = e.target;
-    const progress = document.getElementById('progress');
     const method = document.getElementById('method').value;
     btn.disabled = true;
     document.getElementById('review').innerHTML = '';
+    const rows = [];
     try {
-      let rows;
-      if (method === 'claude') {
-        progress.textContent = 'Claude leest de foto… (duurt ongeveer 10–30 seconden)';
-        const { claudePairs } = await import('./claude.js');
-        const jpeg = canvasToBase64Jpeg(toCanvas(bitmap, 1800, { rotate }));
-        rows = await claudePairs(jpeg, apiKey, { frontLang: deck.frontLang, backLang: deck.backLang });
-      } else {
-        progress.textContent = 'Tekstherkenning laden… (de eerste keer kan dit even duren)';
-        const { ocrPairs } = await import('./ocr.js');
-        const res = await ocrPairs(toCanvas(bitmap, 2400, { rotate, grayscale: true }), (m) => {
-          if (m.status === 'recognizing text') progress.textContent = `Tekst herkennen… ${Math.round(m.progress * 100)}%`;
-          else if (m.status) progress.textContent = `${m.status}…`;
-        });
-        rows = res.rows;
+      for (let i = 0; i < photos.length; i++) {
+        const { bitmap, rotate } = photos[i];
+        const which = photos.length > 1 ? `Foto ${i + 1} van ${photos.length}: ` : '';
+        if (method === 'claude') {
+          progress.textContent = `${which}Claude leest de foto… (duurt ongeveer 10–30 seconden)`;
+          const { claudePairs } = await import('./claude.js');
+          const jpeg = canvasToBase64Jpeg(toCanvas(bitmap, 1800, { rotate }));
+          rows.push(...(await claudePairs(jpeg, apiKey, { frontLang: deck.frontLang, backLang: deck.backLang })));
+        } else {
+          progress.textContent = `${which}Tekstherkenning laden… (de eerste keer kan dit even duren)`;
+          const { ocrPairs } = await import('./ocr.js');
+          const res = await ocrPairs(toCanvas(bitmap, 2400, { rotate, grayscale: true }), (m) => {
+            if (m.status === 'recognizing text') progress.textContent = `${which}Tekst herkennen… ${Math.round(m.progress * 100)}%`;
+          });
+          rows.push(...res.rows);
+        }
       }
       progress.textContent = rows.length ? `${rows.length} regels gevonden.` : 'Geen woordjes gevonden. Probeer een scherpere of rechtere foto.';
       if (rows.length) document.getElementById('review').appendChild(reviewTable(deck, rows, existing));
     } catch (err) {
       console.error(err);
-      progress.textContent = '';
+      progress.textContent = rows.length ? `${rows.length} regels gevonden; daarna ging er iets mis.` : '';
+      if (rows.length) document.getElementById('review').appendChild(reviewTable(deck, rows, existing));
       toast(friendlyError(err), 'bad');
     } finally {
       btn.disabled = false;
@@ -740,6 +780,11 @@ const HELP_STEPS = [
     title: 'Foto van je boek',
     text: 'Open je hoofdstuk. Tik op <b>Foto → kaartjes</b>.<br>Foto <b>recht</b> en <b>scherp</b>.',
     demo: '<span class="demo-btn">📷 Foto → kaartjes</span>',
+  },
+  {
+    emoji: '📱',
+    title: 'Foto met je iPhone?',
+    text: 'Mail hem naar jezelf.<br>Download hem op de Chromebook.<br>Tik op <b>Foto kiezen</b>.',
   },
   {
     emoji: '✅',
