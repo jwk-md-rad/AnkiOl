@@ -3,7 +3,7 @@ import { previewLabels, AGAIN, HARD, GOOD, EASY, formatMs } from './srs.js';
 import { Session, countDue } from './session.js';
 import { checkAnswer, normalize } from './check.js';
 import { pairsFromText } from './parse.js';
-import { loadImage, toCanvas, canvasToBase64Jpeg } from './image.js';
+import { loadImage, toCanvas, canvasToBase64Jpeg, isHeic, isImageFile } from './image.js';
 
 const $app = document.getElementById('app');
 const LANGS = { en: 'Engels', nl: 'Nederlands', fr: 'Frans', de: 'Duits' };
@@ -28,10 +28,18 @@ function render(html) {
   window.scrollTo(0, 0);
 }
 
+// Claude-modellen voor foto → kaartjes (kosten: schatting per bladzijde).
+const CLAUDE_MODELS = [
+  { id: 'claude-opus-5-5', name: 'Claude Opus 5.5', note: 'beste resultaat, ± 5–10 cent per bladzijde' },
+  { id: 'claude-sonnet-5-5', name: 'Claude Sonnet 5.5', note: 'goedkoper, ± 2–5 cent per bladzijde' },
+];
+const modelName = (id) => (CLAUDE_MODELS.find((m) => m.id === id) || CLAUDE_MODELS[0]).name;
+
 const settings = {
   async get() {
     return {
       apiKey: await db.getMeta('apiKey', ''),
+      model: await db.getMeta('model', CLAUDE_MODELS[0].id),
       newPerDay: await db.getMeta('newPerDay', 20),
       speak: await db.getMeta('speak', true),
     };
@@ -378,34 +386,38 @@ async function addView(deck) {
 // ---------- Foto → kaartjes ----------
 
 async function photoView(deck) {
-  const { apiKey } = await settings.get();
+  const { apiKey, model } = await settings.get();
   const existing = await db.listCards(deck.id);
-  let bitmap = null;
-  let rotate = 0;
+  const photos = []; // { bitmap, rotate, crop }
   let stream = null;
 
   render(`
     <nav class="crumbs"><a href="#/deck/${deck.id}">← ${esc(deck.name)}</a></nav>
-    <section class="panel">
+    <section class="panel" id="drop">
       <h2>Foto → kaartjes</h2>
-      <p class="muted">Maak een scherpe, rechte foto van de woordenlijst in je leerboek, of kies een foto die je al hebt.</p>
+      <p class="muted">Maak een scherpe, rechte foto van de woordjes in je boek. Meer pagina's? Kies meerdere foto's.</p>
       <div class="row">
-        <label class="button big">🖼 Foto kiezen<input id="file" type="file" accept="image/*" hidden></label>
+        <label class="button big primary">🖼 Foto kiezen<input id="file" type="file" accept="image/*,.heic,.heif" multiple hidden></label>
         <button id="cam" class="big">📷 Camera</button>
       </div>
+      <details class="iphone">
+        <summary>📱 Foto gemaakt met je iPhone?</summary>
+        <ol>
+          <li>Mail de foto naar jezelf.</li>
+          <li>Open de mail op de Chromebook en <b>download</b> de foto.</li>
+          <li>Tik hier op <b>Foto kiezen</b> → map <b>Downloads</b>.</li>
+        </ol>
+      </details>
       <div id="camBox" hidden>
         <video id="video" autoplay playsinline></video>
-        <div class="row"><button id="snap" class="primary big">Foto maken</button><button id="camStop">Annuleren</button></div>
+        <div class="row"><button id="snap" class="primary big">Foto maken</button><button id="camStop">Klaar</button></div>
       </div>
       <div id="preview" hidden>
-        <canvas id="canvas"></canvas>
-        <div class="row">
-          <button id="rotL">⟲ Draai</button><button id="rotR">⟳ Draai</button>
-        </div>
+        <div id="thumbs" class="thumbs"></div>
         <div class="row">
           <label>Herkennen met
             <select id="method">
-              <option value="claude" ${apiKey ? 'selected' : 'disabled'}>Claude AI (beste resultaat)${apiKey ? '' : ' – stel eerst een API-sleutel in'}</option>
+              <option value="claude" ${apiKey ? 'selected' : 'disabled'}>${modelName(model)}${apiKey ? '' : ' – stel eerst een API-sleutel in'}</option>
               <option value="ocr" ${apiKey ? '' : 'selected'}>Gratis tekstherkenning (OCR)</option>
             </select>
           </label>
@@ -416,27 +428,72 @@ async function photoView(deck) {
     </section>
     <div id="review"></div>`);
 
-  const canvas = document.getElementById('canvas');
-  const drawPreview = () => {
-    const c = toCanvas(bitmap, 1200, { rotate });
-    canvas.width = c.width;
-    canvas.height = c.height;
-    canvas.getContext('2d').drawImage(c, 0, 0);
-    document.getElementById('preview').hidden = false;
+  const progress = document.getElementById('progress');
+  const drawThumbs = () => {
+    const box = document.getElementById('thumbs');
+    box.innerHTML = '';
+    photos.forEach((ph, i) => {
+      const tile = document.createElement('div');
+      tile.className = 'thumb';
+      tile.appendChild(toCanvas(ph.bitmap, 900, { rotate: ph.rotate, crop: ph.crop }));
+      const bar = document.createElement('div');
+      bar.className = 'row';
+      bar.innerHTML = `<button data-act="c" title="Alleen de woordjes selecteren">✂ Uitsnijden</button><button data-act="l" title="Draai links">⟲</button><button data-act="r" title="Draai rechts">⟳</button><button data-act="x" class="danger" title="Weghalen">✕</button>`;
+      bar.onclick = async (e) => {
+        const act = e.target.dataset.act;
+        if (act === 'c') ph.crop = await cropDialog(ph);
+        if (act === 'l' || act === 'r') ph.crop = null;
+        if (act === 'l') ph.rotate = (ph.rotate + 270) % 360;
+        if (act === 'r') ph.rotate = (ph.rotate + 90) % 360;
+        if (act === 'x') photos.splice(i, 1);
+        if (act) drawThumbs();
+      };
+      tile.appendChild(bar);
+      box.appendChild(tile);
+    });
+    document.getElementById('preview').hidden = !photos.length;
+    document.getElementById('run').textContent = photos.length > 1 ? `Maak kaartjes (${photos.length} foto's)` : 'Maak kaartjes';
+  };
+  const addFiles = async (files) => {
+    for (const file of files) {
+      if (!isImageFile(file)) continue;
+      try {
+        progress.textContent = isHeic(file) ? 'iPhone-foto omzetten…' : '';
+        photos.push({ bitmap: await loadImage(file), rotate: 0, crop: null });
+      } catch (err) {
+        console.error(err);
+        toast(`Kan "${file.name}" niet openen`, 'bad');
+      }
+    }
+    progress.textContent = '';
+    drawThumbs();
   };
   const stopCam = () => {
     if (stream) stream.getTracks().forEach((t) => t.stop());
     stream = null;
     document.getElementById('camBox').hidden = true;
   };
-  cleanup = stopCam;
+  const onPaste = (e) => addFiles([...(e.clipboardData?.files || [])]);
+  document.addEventListener('paste', onPaste);
+  cleanup = () => {
+    stopCam();
+    document.removeEventListener('paste', onPaste);
+  };
 
+  const drop = document.getElementById('drop');
+  drop.ondragover = (e) => {
+    e.preventDefault();
+    drop.classList.add('dragging');
+  };
+  drop.ondragleave = () => drop.classList.remove('dragging');
+  drop.ondrop = (e) => {
+    e.preventDefault();
+    drop.classList.remove('dragging');
+    addFiles([...e.dataTransfer.files]);
+  };
   document.getElementById('file').onchange = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    bitmap = await loadImage(file);
-    rotate = 0;
-    drawPreview();
+    await addFiles([...e.target.files]);
+    e.target.value = '';
   };
   document.getElementById('cam').onclick = async () => {
     try {
@@ -451,52 +508,111 @@ async function photoView(deck) {
   };
   document.getElementById('camStop').onclick = stopCam;
   document.getElementById('snap').onclick = async () => {
-    const video = document.getElementById('video');
-    bitmap = await createImageBitmap(video);
-    rotate = 0;
-    stopCam();
-    drawPreview();
-  };
-  document.getElementById('rotL').onclick = () => {
-    rotate = (rotate + 270) % 360;
-    drawPreview();
-  };
-  document.getElementById('rotR').onclick = () => {
-    rotate = (rotate + 90) % 360;
-    drawPreview();
+    photos.push({ bitmap: await createImageBitmap(document.getElementById('video')), rotate: 0, crop: null });
+    drawThumbs();
+    toast('Foto toegevoegd. Nog een pagina? Maak nog een foto.', 'ok');
   };
   document.getElementById('run').onclick = async (e) => {
     const btn = e.target;
-    const progress = document.getElementById('progress');
     const method = document.getElementById('method').value;
     btn.disabled = true;
     document.getElementById('review').innerHTML = '';
+    const rows = [];
     try {
-      let rows;
-      if (method === 'claude') {
-        progress.textContent = 'Claude leest de foto… (duurt ongeveer 10–30 seconden)';
-        const { claudePairs } = await import('./claude.js');
-        const jpeg = canvasToBase64Jpeg(toCanvas(bitmap, 1800, { rotate }));
-        rows = await claudePairs(jpeg, apiKey, { frontLang: deck.frontLang, backLang: deck.backLang });
-      } else {
-        progress.textContent = 'Tekstherkenning laden… (de eerste keer kan dit even duren)';
-        const { ocrPairs } = await import('./ocr.js');
-        const res = await ocrPairs(toCanvas(bitmap, 2400, { rotate, grayscale: true }), (m) => {
-          if (m.status === 'recognizing text') progress.textContent = `Tekst herkennen… ${Math.round(m.progress * 100)}%`;
-          else if (m.status) progress.textContent = `${m.status}…`;
-        });
-        rows = res.rows;
+      for (let i = 0; i < photos.length; i++) {
+        const { bitmap, rotate, crop } = photos[i];
+        const which = photos.length > 1 ? `Foto ${i + 1} van ${photos.length}: ` : '';
+        if (method === 'claude') {
+          progress.textContent = `${which}Claude leest de foto… (duurt ongeveer 10–30 seconden)`;
+          const { claudePairs } = await import('./claude.js');
+          const jpeg = canvasToBase64Jpeg(toCanvas(bitmap, 1800, { rotate, crop }));
+          rows.push(...(await claudePairs(jpeg, apiKey, { frontLang: deck.frontLang, backLang: deck.backLang, model })));
+        } else {
+          progress.textContent = `${which}Tekstherkenning laden… (de eerste keer kan dit even duren)`;
+          const { ocrPairs } = await import('./ocr.js');
+          const res = await ocrPairs(toCanvas(bitmap, 2400, { rotate, crop, grayscale: true }), (m) => {
+            if (m.status === 'Stand van de foto bepalen') progress.textContent = `${which}Stand van de foto bepalen…`;
+            else if (m.status === 'recognizing text') progress.textContent = `${which}Tekst herkennen… ${Math.round(m.progress * 100)}%`;
+          });
+          rows.push(...res.rows);
+        }
       }
-      progress.textContent = rows.length ? `${rows.length} regels gevonden.` : 'Geen woordjes gevonden. Probeer een scherpere of rechtere foto.';
+      const tip = method === 'ocr' ? ' Veel fouten? Snij alleen de woordjes uit (✂) of gebruik Claude AI.' : '';
+      progress.textContent = rows.length ? `${rows.length} regels gevonden.${tip}` : `Geen woordjes gevonden. Probeer een scherpere of rechtere foto.${tip}`;
       if (rows.length) document.getElementById('review').appendChild(reviewTable(deck, rows, existing));
     } catch (err) {
       console.error(err);
-      progress.textContent = '';
+      progress.textContent = rows.length ? `${rows.length} regels gevonden; daarna ging er iets mis.` : '';
+      if (rows.length) document.getElementById('review').appendChild(reviewTable(deck, rows, existing));
       toast(friendlyError(err), 'bad');
     } finally {
       btn.disabled = false;
     }
   };
+}
+
+// Laat de gebruiker een rechthoek trekken om de woordjes. Geeft de uitsnede
+// (fracties 0–1) terug, of null voor de hele foto.
+function cropDialog(photo) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'crop-overlay';
+    overlay.innerHTML = `
+      <div class="crop-box">
+        <p><b>Trek met je vinger of muis een vak om de woordjes.</b></p>
+        <div class="crop-stage"><div class="crop-rect" hidden></div></div>
+        <div class="row center">
+          <button class="whole">Hele foto</button>
+          <button class="cancel">Annuleren</button>
+          <button class="primary done" disabled>Klaar ✓</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    const stage = overlay.querySelector('.crop-stage');
+    const rectEl = overlay.querySelector('.crop-rect');
+    const canvas = toCanvas(photo.bitmap, 1400, { rotate: photo.rotate });
+    stage.prepend(canvas);
+    let start = null;
+    let rect = photo.crop ? { ...photo.crop } : null;
+    const show = () => {
+      if (!rect) return;
+      Object.assign(rectEl.style, {
+        left: `${rect.x * 100}%`,
+        top: `${rect.y * 100}%`,
+        width: `${rect.w * 100}%`,
+        height: `${rect.h * 100}%`,
+      });
+      rectEl.hidden = false;
+      overlay.querySelector('.done').disabled = rect.w < 0.03 || rect.h < 0.03;
+    };
+    const pos = (e) => {
+      const r = canvas.getBoundingClientRect();
+      return {
+        x: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)),
+        y: Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)),
+      };
+    };
+    stage.onpointerdown = (e) => {
+      e.preventDefault();
+      stage.setPointerCapture(e.pointerId);
+      start = pos(e);
+    };
+    stage.onpointermove = (e) => {
+      if (!start) return;
+      const p = pos(e);
+      rect = { x: Math.min(start.x, p.x), y: Math.min(start.y, p.y), w: Math.abs(p.x - start.x), h: Math.abs(p.y - start.y) };
+      show();
+    };
+    stage.onpointerup = () => (start = null);
+    show();
+    const close = (value) => {
+      overlay.remove();
+      resolve(value);
+    };
+    overlay.querySelector('.whole').onclick = () => close(null);
+    overlay.querySelector('.cancel').onclick = () => close(photo.crop);
+    overlay.querySelector('.done').onclick = () => close(rect);
+  });
 }
 
 function friendlyError(err) {
@@ -738,8 +854,13 @@ const HELP_STEPS = [
   {
     emoji: '📷',
     title: 'Foto van je boek',
-    text: 'Open je hoofdstuk. Tik op <b>Foto → kaartjes</b>.<br>Foto <b>recht</b> en <b>scherp</b>.',
+    text: 'Open je hoofdstuk. Tik op <b>Foto → kaartjes</b>.<br>Foto <b>recht</b> en <b>scherp</b>.<br>Tip: met <b>✂ Uitsnijden</b> kies je alleen de woordjes.',
     demo: '<span class="demo-btn">📷 Foto → kaartjes</span>',
+  },
+  {
+    emoji: '📱',
+    title: 'Foto met je iPhone?',
+    text: 'Mail hem naar jezelf.<br>Download hem op de Chromebook.<br>Tik op <b>Foto kiezen</b>.',
   },
   {
     emoji: '✅',
@@ -828,6 +949,11 @@ async function settingsView() {
         <label>Anthropic API-sleutel (voor Claude AI foto-herkenning)
           <input name="apiKey" type="password" autocomplete="off" placeholder="sk-ant-…" value="${esc(s.apiKey)}">
         </label>
+        <label>Claude-model
+          <select name="model">
+            ${CLAUDE_MODELS.map((m) => `<option value="${m.id}" ${m.id === s.model ? 'selected' : ''}>${m.name} – ${m.note}</option>`).join('')}
+          </select>
+        </label>
         <p class="muted small">Optioneel. Zonder sleutel gebruikt de app gratis tekstherkenning. Met een sleutel leest Claude de foto en maakt nettere kaartjes
         (kost een paar cent per foto). Een sleutel maak je op <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>.
         De sleutel wordt alleen op deze Chromebook bewaard en gaat rechtstreeks naar Anthropic.</p>
@@ -844,6 +970,7 @@ async function settingsView() {
     await db.setMeta('newPerDay', Math.max(1, Number(f.newPerDay.value) || 20));
     await db.setMeta('speak', f.speak.checked);
     await db.setMeta('apiKey', f.apiKey.value.trim());
+    await db.setMeta('model', f.model.value);
     toast('Instellingen opgeslagen', 'ok');
   };
 }

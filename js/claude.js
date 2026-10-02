@@ -37,6 +37,7 @@ Maak er flashcards van:
 - Meerdere vertalingen voor één woord zet je samen in "back", gescheiden door komma's.
 - Sla kopjes, paginanummers, uitspraaktekens (fonetisch schrift), oefeningen en uitleg over.
 - Staat er een voorbeeldzin met vertaling bij, maak daar dan een aparte kaart van.
+- De foto kan scheef of op z'n kant staan; lees hem in de juiste richting.
 - Verzin niets wat niet op de foto staat. Is de foto onleesbaar, geef dan een lege lijst.`;
 
   const response = await client.beta.messages.create({

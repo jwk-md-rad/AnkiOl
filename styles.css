@@ -174,6 +174,25 @@ kbd { font-size: 0.7rem; opacity: 0.7; border: 1px solid currentColor; border-ra
 .toast.ok { background: var(--good); color: #fff; }
 .toast.bad { background: var(--again); color: #fff; }
 
+/* Foto's */
+.thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-top: 12px; }
+.thumb { border: 1px solid var(--line); border-radius: 10px; padding: 8px; }
+.thumb canvas { width: 100%; height: auto; max-height: 300px; object-fit: contain; margin: 0; border: 0; }
+.thumb .row { justify-content: center; margin-top: 6px; }
+.iphone { margin-top: 14px; }
+.iphone summary { cursor: pointer; font-weight: 600; color: var(--primary); }
+.iphone ol { margin: 8px 0 0; padding-left: 22px; font-size: 1.05rem; }
+#drop.dragging { outline: 3px dashed var(--primary); outline-offset: -8px; }
+
+/* Uitsnijden */
+.crop-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.75); z-index: 30; display: flex; align-items: center; justify-content: center; padding: 12px; }
+.crop-box { background: var(--panel); border-radius: var(--radius); padding: 16px; max-width: 100%; max-height: 100%; display: flex; flex-direction: column; align-items: center; }
+.crop-box p { margin: 0 0 10px; text-align: center; }
+.crop-stage { position: relative; display: inline-block; touch-action: none; cursor: crosshair; user-select: none; line-height: 0; }
+.crop-stage canvas { max-width: min(92vw, 1000px); max-height: 70vh; margin: 0; border-radius: 4px; }
+.crop-rect { position: absolute; border: 3px solid var(--primary); box-shadow: 0 0 0 9999px rgba(0,0,0,.45); pointer-events: none; }
+.thumb .row button { padding: 6px 10px; }
+
 /* Uitleg */
 .top-links { display: flex; gap: 4px; }
 .help-link { text-decoration: none; font-weight: 600; }

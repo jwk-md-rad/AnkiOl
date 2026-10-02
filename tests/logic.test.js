@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { newState, schedule, AGAIN, HARD, GOOD, EASY, MINUTE, previewLabels } from '../js/srs.js';
 import { checkAnswer, normalize } from '../js/check.js';
-import { pairsFromText, pairsFromOcrLines } from '../js/parse.js';
+import { pairsFromText, pairsFromLines, plausible } from '../js/parse.js';
 import { Session } from '../js/session.js';
 
 const NOW = new Date('2026-10-02T15:00:00').getTime();
@@ -79,14 +79,71 @@ test('tekst plakken wordt gesplitst in paren', () => {
   );
 });
 
-test('OCR-kolommen worden herkend aan het gat tussen woorden', () => {
-  const w = (text, x0, x1) => ({ text, bbox: { x0, x1, y0: 0, y1: 20 } });
-  const rows = pairsFromOcrLines([
-    { text: 'the weather het weer', words: [w('the', 0, 30), w('weather', 36, 110), w('het', 400, 430), w('weer', 436, 480)] },
-    { text: 'Unit 3 Words', words: [w('Unit', 0, 40), w('3', 46, 56), w('Words', 62, 120)] },
+// Nagebootste OCR-uitvoer zoals Tesseract die geeft (elke regel met woorden,
+// posities en basislijn), van een scheve, buigende leerboekpagina.
+function fakeOcr(cells, { slope = (x, y) => -0.08 + y / 20000 } = {}) {
+  const H = 30;
+  return cells.map(([text, x, row, conf = 92]) => {
+    const words = [];
+    let cx = x;
+    const y0 = 60 + row * 55;
+    for (const t of text.split(' ')) {
+      const w = t.length * 16;
+      const m = slope(cx, y0);
+      const yb = y0 + m * cx;
+      words.push({ text: t, confidence: conf, bbox: { x0: cx, x1: cx + w, y0: yb - H, y1: yb }, baseline: { x0: cx, x1: cx + w, y0: yb, y1: yb + m * w, has_baseline: true } });
+      cx += w + 12;
+    }
+    const f = words[0];
+    const l = words[words.length - 1];
+    return { words, baseline: { x0: f.baseline.x0, y0: f.baseline.y0, x1: l.baseline.x1, y1: l.baseline.y1 } };
+  });
+}
+
+test('OCR-pagina: twee tabellen, schuin, vakjes, getallen, kopjes, doorlopende woordjes', () => {
+  const cells = [
+    ['B Looks', 60, 0], ['Uiterlijk', 360, 0],
+    ['O bald', 60, 1], ['kaal', 360, 1],
+    ['[J beard', 60, 2], ['[brɪəd]', 230, 2, 60], ['baard', 360, 2],
+    ['WW scar', 60, 3], ['litteken', 360, 3],
+    ['thirty', 60, 4], ['30', 360, 4],
+    ['O great-', 60, 5], ['overgrootvader', 360, 5],
+    ['grandfather', 60, 6],
+    ['one thousand', 60, 7],
+    ['and eleven', 60, 8], ['1011', 360, 8],
+    ['O nephew', 60, 9], ['neef (kind van', 360, 9],
+    ['zus/broer)', 360, 10],
+    ['O shy', 800, 1], ['verlegen', 1100, 1],
+    ['O smart', 800, 2], ['slim', 1100, 2],
+    ['O sweet', 800, 3], ['lief', 1100, 3],
+    ['O mean', 800, 4], ['gemeen', 1100, 4],
+    ['~|', 800, 5, 20],
+  ];
+  const rows = pairsFromLines(fakeOcr(cells));
+  const ok = rows.filter((r) => r.ok).map((r) => `${r.front} = ${r.back}`);
+  assert.deepEqual(ok, [
+    'bald = kaal',
+    'beard = baard',
+    'scar = litteken',
+    'thirty = 30',
+    'great-grandfather = overgrootvader',
+    'one thousand and eleven = 1011',
+    'nephew = neef (kind van zus/broer)',
+    'shy = verlegen',
+    'smart = slim',
+    'sweet = lief',
+    'mean = gemeen',
   ]);
-  assert.deepEqual(rows[0], { front: 'the weather', back: 'het weer', ok: true });
-  assert.equal(rows[1].ok, false);
+  assert.ok(rows.some((r) => r.front === 'Looks' && r.back === 'Uiterlijk' && !r.ok), 'kopje niet aangevinkt');
+});
+
+test('plausible herkent OCR-rommel', () => {
+  assert.equal(plausible('house'), true);
+  assert.equal(plausible('„B'), false);
+  assert.equal(plausible('oY) ga. 0'), false);
+  assert.equal(plausible('§'), false);
+  assert.equal(plausible('stiefvader', 30), false);
+  assert.equal(plausible('1011'), true);
 });
 
 test('sessie: nieuwe kaarten max per dag, één richting per kaart', () => {
