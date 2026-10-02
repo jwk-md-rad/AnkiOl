@@ -11,12 +11,24 @@ function shuffle(arr) {
   return arr;
 }
 
+// Stone-oefeningen hebben maar één richting (de opdracht zelf bepaalt de taal).
+export function dirsFor(card, dirs) {
+  return card.kind === 'stone' ? ['fwd'] : dirs;
+}
+
+// Welke variant van een Stone-oefening deze keer? Steeds een andere.
+export function nextVariant(card) {
+  const n = (card.variants || []).length;
+  if (n <= 1) return 0;
+  return ((card.lastVariant ?? -1) + 1) % n;
+}
+
 export function countDue(cards, dirs, now = Date.now()) {
   let fresh = 0;
   let learn = 0;
   let review = 0;
   for (const c of cards) {
-    for (const d of dirs) {
+    for (const d of dirsFor(c, dirs)) {
       const s = c[d];
       if (s.state === 'new') fresh++;
       else if (s.due <= now) {
@@ -33,7 +45,7 @@ export class Session {
     this.items = [];
     const fresh = [];
     for (const card of cards) {
-      for (const dir of dirs) {
+      for (const dir of dirsFor(card, dirs)) {
         const s = card[dir];
         if (s.state === 'new') fresh.push({ card, dir });
         else if (s.due <= now + LEARN_AHEAD) this.items.push({ card, dir });

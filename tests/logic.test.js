@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { newState, schedule, AGAIN, HARD, GOOD, EASY, MINUTE, previewLabels } from '../js/srs.js';
 import { checkAnswer, normalize } from '../js/check.js';
 import { pairsFromText, pairsFromLines, plausible } from '../js/parse.js';
-import { Session } from '../js/session.js';
+import { Session, countDue, nextVariant, dirsFor } from '../js/session.js';
 
 const NOW = new Date('2026-10-02T15:00:00').getTime();
 
@@ -169,4 +169,29 @@ test('sessie: nieuwe kaarten max per dag, één richting per kaart', () => {
   assert.ok(guard < 200, 'sessie moet eindigen');
   assert.equal(s.stats.answered, 40); // elke kaart 2x (leerstap 1 + 10 min)
   assert.ok(cards.filter((c) => c.fwd.state === 'review' || c.rev.state === 'review').length === 20);
+});
+
+test('Stone-oefeningen: één richting en steeds een andere variant', () => {
+  const stone = {
+    id: 's1',
+    kind: 'stone',
+    created: 0,
+    variants: [{ prompt: 'a' }, { prompt: 'b' }, { prompt: 'c' }],
+    fwd: newState(),
+    rev: newState(),
+  };
+  const word = { id: 'w1', created: 1, front: 'house', back: 'huis', fwd: newState(), rev: newState() };
+  assert.deepEqual(dirsFor(stone, ['fwd', 'rev']), ['fwd']);
+  assert.deepEqual(dirsFor(stone, ['rev']), ['fwd']);
+  assert.deepEqual(countDue([stone, word], ['fwd', 'rev']), { fresh: 3, learn: 0, review: 0 });
+  // Een sessie NL→EN neemt de Stone-oefening ook mee.
+  const s = new Session([stone, word], ['rev'], { newLimit: 10, now: NOW });
+  assert.deepEqual(s.newItems.map((i) => `${i.card.id}:${i.dir}`).sort(), ['s1:fwd', 'w1:rev']);
+  const seen = [];
+  for (let k = 0; k < 4; k++) {
+    const v = nextVariant(stone);
+    seen.push(v);
+    stone.lastVariant = v;
+  }
+  assert.deepEqual(seen, [0, 1, 2, 0]);
 });
