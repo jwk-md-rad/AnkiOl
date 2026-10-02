@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { newState, schedule, AGAIN, HARD, GOOD, EASY, MINUTE, previewLabels } from '../js/srs.js';
 import { checkAnswer, normalize } from '../js/check.js';
-import { pairsFromText, pairsFromOcrLines } from '../js/parse.js';
+import { pairsFromText, pairsFromWords, plausible } from '../js/parse.js';
 import { Session } from '../js/session.js';
 
 const NOW = new Date('2026-10-02T15:00:00').getTime();
@@ -79,14 +79,36 @@ test('tekst plakken wordt gesplitst in paren', () => {
   );
 });
 
-test('OCR-kolommen worden herkend aan het gat tussen woorden', () => {
-  const w = (text, x0, x1) => ({ text, bbox: { x0, x1, y0: 0, y1: 20 } });
-  const rows = pairsFromOcrLines([
-    { text: 'the weather het weer', words: [w('the', 0, 30), w('weather', 36, 110), w('het', 400, 430), w('weer', 436, 480)] },
-    { text: 'Unit 3 Words', words: [w('Unit', 0, 40), w('3', 46, 56), w('Words', 62, 120)] },
-  ]);
-  assert.deepEqual(rows[0], { front: 'the weather', back: 'het weer', ok: true });
-  assert.equal(rows[1].ok, false);
+test('OCR-woorden: kolommen, uitspraak, zijvak, kopjes en schuine foto', () => {
+  // Woorden als [tekst, x0, y, breedte, hoogte, betrouwbaarheid]; pagina 2° scheef.
+  const tan = Math.tan((2 * Math.PI) / 180);
+  const w = (text, x0, y, width, h = 20, confidence = 90) => {
+    const dy = x0 * tan;
+    return { text, confidence, bbox: { x0, x1: x0 + width, y0: y + dy, y1: y + dy + h } };
+  };
+  const words = [
+    w('Unit', 400, 0, 80, 34), w('3', 490, 0, 20, 34), w('Words', 900, 0, 90, 34),
+    w('Tip!', 20, 100, 50), w('Leer', 80, 100, 50),
+    w('brother', 400, 100, 90), w('[brʌðə]', 650, 100, 80, 20, 50), w('broer', 900, 100, 60),
+    w('Say', 20, 140, 40), w('this', 70, 140, 40),
+    w('to', 400, 140, 25), w('be', 430, 140, 25), w('married', 460, 140, 80), w('[ˈmærid]', 650, 140, 80, 20, 40), w('getrouwd', 900, 140, 90), w('zijn', 995, 140, 40),
+    w('cousin', 400, 180, 70), w('[kʌzn]', 650, 180, 70), w('neef,', 900, 180, 50), w('nicht', 955, 180, 50),
+    w('~|', 400, 220, 20, 20, 20), w('aunt', 400, 260, 50), w('[ɑːnt]', 650, 260, 60), w('tante', 900, 260, 60),
+  ];
+  const angle = Math.atan(tan);
+  const rows = pairsFromWords(words, angle);
+  const ok = rows.filter((r) => r.ok).map((r) => `${r.front} = ${r.back}`);
+  assert.deepEqual(ok, ['brother = broer', 'to be married = getrouwd zijn', 'cousin = neef, nicht', 'aunt = tante']);
+  assert.ok(rows.some((r) => r.front === 'Unit 3' && r.back === 'Words' && !r.ok), 'kopje niet aangevinkt');
+  assert.ok(!rows.some((r) => /Tip|Say/.test(r.front + r.back)), 'zijvak genegeerd');
+});
+
+test('plausible herkent OCR-rommel', () => {
+  assert.equal(plausible('house'), true);
+  assert.equal(plausible('„B'), false);
+  assert.equal(plausible('oY) ga. 0'), false);
+  assert.equal(plausible('§'), false);
+  assert.equal(plausible('stiefvader', 30), false);
 });
 
 test('sessie: nieuwe kaarten max per dag, één richting per kaart', () => {

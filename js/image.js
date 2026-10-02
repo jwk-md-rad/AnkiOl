@@ -36,26 +36,36 @@ export async function loadImage(file) {
   }
 }
 
-export function toCanvas(bitmap, maxSide, { grayscale = false, rotate = 0 } = {}) {
-  const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
-  const w = Math.round(bitmap.width * scale);
-  const h = Math.round(bitmap.height * scale);
+// Foto draaien, eventueel uitsnijden (crop: x, y, w, h als fractie 0–1 van
+// de gedraaide foto) en verkleinen tot maxSide pixels.
+export function toCanvas(bitmap, maxSide, { grayscale = false, rotate = 0, crop = null } = {}) {
+  const W = bitmap.width;
+  const H = bitmap.height;
   const swap = rotate % 180 !== 0;
+  const rw = swap ? H : W;
+  const rh = swap ? W : H;
+  const c = crop || { x: 0, y: 0, w: 1, h: 1 };
+  const cx = c.x * rw;
+  const cy = c.y * rh;
+  const cw = c.w * rw;
+  const ch = c.h * rh;
+  const scale = Math.min(1, maxSide / Math.max(cw, ch));
   const canvas = document.createElement('canvas');
-  canvas.width = swap ? h : w;
-  canvas.height = swap ? w : h;
+  canvas.width = Math.max(1, Math.round(cw * scale));
+  canvas.height = Math.max(1, Math.round(ch * scale));
   const ctx = canvas.getContext('2d');
-  ctx.translate(canvas.width / 2, canvas.height / 2);
+  ctx.scale(scale, scale);
+  ctx.translate(-cx + rw / 2, -cy + rh / 2);
   ctx.rotate((rotate * Math.PI) / 180);
-  ctx.drawImage(bitmap, -w / 2, -h / 2, w, h);
+  ctx.drawImage(bitmap, -W / 2, -H / 2, W, H);
   if (grayscale) {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const d = img.data;
     for (let i = 0; i < d.length; i += 4) {
       const v = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
       d[i] = d[i + 1] = d[i + 2] = v;
     }
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.putImageData(img, 0, 0);
   }
   return canvas;

@@ -1,6 +1,6 @@
 // Gratis tekstherkenning in de browser met Tesseract.js.
 // De taalbestanden worden de eerste keer gedownload en daarna bewaard.
-import { pairsFromOcrLines, pairsFromText } from './parse.js';
+import { pairsFromWords, pairsFromText, skewAngle } from './parse.js';
 
 const TESSERACT_URL = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
 let workerPromise;
@@ -33,12 +33,11 @@ async function getWorker() {
   return workerPromise;
 }
 
-export async function ocrPairs(canvas, onProgress = () => {}) {
+export async function ocrPairs(canvas, onProgress = () => {}, { psm = '6' } = {}) {
   progressCb = onProgress;
   const worker = await getWorker();
-  await worker.setParameters({ preserve_interword_spaces: '1', tessedit_pageseg_mode: '6' });
+  await worker.setParameters({ preserve_interword_spaces: '1', tessedit_pageseg_mode: psm });
   const { data } = await worker.recognize(canvas);
-  const lines = data.lines && data.lines.length ? data.lines : null;
-  const rows = lines ? pairsFromOcrLines(lines) : pairsFromText(data.text);
+  const rows = data.words && data.words.length ? pairsFromWords(data.words, skewAngle(data.lines)) : pairsFromText(data.text);
   return { rows, text: data.text };
 }

@@ -380,7 +380,7 @@ async function addView(deck) {
 async function photoView(deck) {
   const { apiKey } = await settings.get();
   const existing = await db.listCards(deck.id);
-  const photos = []; // { bitmap, rotate }
+  const photos = []; // { bitmap, rotate, crop }
   let stream = null;
 
   render(`
@@ -427,12 +427,14 @@ async function photoView(deck) {
     photos.forEach((ph, i) => {
       const tile = document.createElement('div');
       tile.className = 'thumb';
-      tile.appendChild(toCanvas(ph.bitmap, 900, { rotate: ph.rotate }));
+      tile.appendChild(toCanvas(ph.bitmap, 900, { rotate: ph.rotate, crop: ph.crop }));
       const bar = document.createElement('div');
       bar.className = 'row';
-      bar.innerHTML = `<button data-act="l" title="Draai links">⟲</button><button data-act="r" title="Draai rechts">⟳</button><button data-act="x" class="danger" title="Weghalen">✕</button>`;
-      bar.onclick = (e) => {
+      bar.innerHTML = `<button data-act="c" title="Alleen de woordjes selecteren">✂ Uitsnijden</button><button data-act="l" title="Draai links">⟲</button><button data-act="r" title="Draai rechts">⟳</button><button data-act="x" class="danger" title="Weghalen">✕</button>`;
+      bar.onclick = async (e) => {
         const act = e.target.dataset.act;
+        if (act === 'c') ph.crop = await cropDialog(ph);
+        if (act === 'l' || act === 'r') ph.crop = null;
         if (act === 'l') ph.rotate = (ph.rotate + 270) % 360;
         if (act === 'r') ph.rotate = (ph.rotate + 90) % 360;
         if (act === 'x') photos.splice(i, 1);
@@ -449,7 +451,7 @@ async function photoView(deck) {
       if (!isImageFile(file)) continue;
       try {
         progress.textContent = isHeic(file) ? 'iPhone-foto omzetten…' : '';
-        photos.push({ bitmap: await loadImage(file), rotate: 0 });
+        photos.push({ bitmap: await loadImage(file), rotate: 0, crop: null });
       } catch (err) {
         console.error(err);
         toast(`Kan "${file.name}" niet openen`, 'bad');
@@ -498,7 +500,7 @@ async function photoView(deck) {
   };
   document.getElementById('camStop').onclick = stopCam;
   document.getElementById('snap').onclick = async () => {
-    photos.push({ bitmap: await createImageBitmap(document.getElementById('video')), rotate: 0 });
+    photos.push({ bitmap: await createImageBitmap(document.getElementById('video')), rotate: 0, crop: null });
     drawThumbs();
     toast('Foto toegevoegd. Nog een pagina? Maak nog een foto.', 'ok');
   };
@@ -510,23 +512,24 @@ async function photoView(deck) {
     const rows = [];
     try {
       for (let i = 0; i < photos.length; i++) {
-        const { bitmap, rotate } = photos[i];
+        const { bitmap, rotate, crop } = photos[i];
         const which = photos.length > 1 ? `Foto ${i + 1} van ${photos.length}: ` : '';
         if (method === 'claude') {
           progress.textContent = `${which}Claude leest de foto… (duurt ongeveer 10–30 seconden)`;
           const { claudePairs } = await import('./claude.js');
-          const jpeg = canvasToBase64Jpeg(toCanvas(bitmap, 1800, { rotate }));
+          const jpeg = canvasToBase64Jpeg(toCanvas(bitmap, 1800, { rotate, crop }));
           rows.push(...(await claudePairs(jpeg, apiKey, { frontLang: deck.frontLang, backLang: deck.backLang })));
         } else {
           progress.textContent = `${which}Tekstherkenning laden… (de eerste keer kan dit even duren)`;
           const { ocrPairs } = await import('./ocr.js');
-          const res = await ocrPairs(toCanvas(bitmap, 2400, { rotate, grayscale: true }), (m) => {
+          const res = await ocrPairs(toCanvas(bitmap, 2400, { rotate, crop, grayscale: true }), (m) => {
             if (m.status === 'recognizing text') progress.textContent = `${which}Tekst herkennen… ${Math.round(m.progress * 100)}%`;
           });
           rows.push(...res.rows);
         }
       }
-      progress.textContent = rows.length ? `${rows.length} regels gevonden.` : 'Geen woordjes gevonden. Probeer een scherpere of rechtere foto.';
+      const tip = method === 'ocr' ? ' Veel fouten? Snij alleen de woordjes uit (✂) of gebruik Claude AI.' : '';
+      progress.textContent = rows.length ? `${rows.length} regels gevonden.${tip}` : `Geen woordjes gevonden. Probeer een scherpere of rechtere foto.${tip}`;
       if (rows.length) document.getElementById('review').appendChild(reviewTable(deck, rows, existing));
     } catch (err) {
       console.error(err);
@@ -537,6 +540,70 @@ async function photoView(deck) {
       btn.disabled = false;
     }
   };
+}
+
+// Laat de gebruiker een rechthoek trekken om de woordjes. Geeft de uitsnede
+// (fracties 0–1) terug, of null voor de hele foto.
+function cropDialog(photo) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'crop-overlay';
+    overlay.innerHTML = `
+      <div class="crop-box">
+        <p><b>Trek met je vinger of muis een vak om de woordjes.</b></p>
+        <div class="crop-stage"><div class="crop-rect" hidden></div></div>
+        <div class="row center">
+          <button class="whole">Hele foto</button>
+          <button class="cancel">Annuleren</button>
+          <button class="primary done" disabled>Klaar ✓</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    const stage = overlay.querySelector('.crop-stage');
+    const rectEl = overlay.querySelector('.crop-rect');
+    const canvas = toCanvas(photo.bitmap, 1400, { rotate: photo.rotate });
+    stage.prepend(canvas);
+    let start = null;
+    let rect = photo.crop ? { ...photo.crop } : null;
+    const show = () => {
+      if (!rect) return;
+      Object.assign(rectEl.style, {
+        left: `${rect.x * 100}%`,
+        top: `${rect.y * 100}%`,
+        width: `${rect.w * 100}%`,
+        height: `${rect.h * 100}%`,
+      });
+      rectEl.hidden = false;
+      overlay.querySelector('.done').disabled = rect.w < 0.03 || rect.h < 0.03;
+    };
+    const pos = (e) => {
+      const r = canvas.getBoundingClientRect();
+      return {
+        x: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)),
+        y: Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)),
+      };
+    };
+    stage.onpointerdown = (e) => {
+      e.preventDefault();
+      stage.setPointerCapture(e.pointerId);
+      start = pos(e);
+    };
+    stage.onpointermove = (e) => {
+      if (!start) return;
+      const p = pos(e);
+      rect = { x: Math.min(start.x, p.x), y: Math.min(start.y, p.y), w: Math.abs(p.x - start.x), h: Math.abs(p.y - start.y) };
+      show();
+    };
+    stage.onpointerup = () => (start = null);
+    show();
+    const close = (value) => {
+      overlay.remove();
+      resolve(value);
+    };
+    overlay.querySelector('.whole').onclick = () => close(null);
+    overlay.querySelector('.cancel').onclick = () => close(photo.crop);
+    overlay.querySelector('.done').onclick = () => close(rect);
+  });
 }
 
 function friendlyError(err) {
@@ -778,7 +845,7 @@ const HELP_STEPS = [
   {
     emoji: '📷',
     title: 'Foto van je boek',
-    text: 'Open je hoofdstuk. Tik op <b>Foto → kaartjes</b>.<br>Foto <b>recht</b> en <b>scherp</b>.',
+    text: 'Open je hoofdstuk. Tik op <b>Foto → kaartjes</b>.<br>Foto <b>recht</b> en <b>scherp</b>.<br>Tip: met <b>✂ Uitsnijden</b> kies je alleen de woordjes.',
     demo: '<span class="demo-btn">📷 Foto → kaartjes</span>',
   },
   {
