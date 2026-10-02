@@ -28,10 +28,18 @@ function render(html) {
   window.scrollTo(0, 0);
 }
 
+// Claude-modellen voor foto → kaartjes (kosten: schatting per bladzijde).
+const CLAUDE_MODELS = [
+  { id: 'claude-opus-5-5', name: 'Claude Opus 5.5', note: 'beste resultaat, ± 5–10 cent per bladzijde' },
+  { id: 'claude-sonnet-5-5', name: 'Claude Sonnet 5.5', note: 'goedkoper, ± 2–5 cent per bladzijde' },
+];
+const modelName = (id) => (CLAUDE_MODELS.find((m) => m.id === id) || CLAUDE_MODELS[0]).name;
+
 const settings = {
   async get() {
     return {
       apiKey: await db.getMeta('apiKey', ''),
+      model: await db.getMeta('model', CLAUDE_MODELS[0].id),
       newPerDay: await db.getMeta('newPerDay', 20),
       speak: await db.getMeta('speak', true),
     };
@@ -378,7 +386,7 @@ async function addView(deck) {
 // ---------- Foto → kaartjes ----------
 
 async function photoView(deck) {
-  const { apiKey } = await settings.get();
+  const { apiKey, model } = await settings.get();
   const existing = await db.listCards(deck.id);
   const photos = []; // { bitmap, rotate, crop }
   let stream = null;
@@ -409,7 +417,7 @@ async function photoView(deck) {
         <div class="row">
           <label>Herkennen met
             <select id="method">
-              <option value="claude" ${apiKey ? 'selected' : 'disabled'}>Claude AI (beste resultaat)${apiKey ? '' : ' – stel eerst een API-sleutel in'}</option>
+              <option value="claude" ${apiKey ? 'selected' : 'disabled'}>${modelName(model)}${apiKey ? '' : ' – stel eerst een API-sleutel in'}</option>
               <option value="ocr" ${apiKey ? '' : 'selected'}>Gratis tekstherkenning (OCR)</option>
             </select>
           </label>
@@ -518,7 +526,7 @@ async function photoView(deck) {
           progress.textContent = `${which}Claude leest de foto… (duurt ongeveer 10–30 seconden)`;
           const { claudePairs } = await import('./claude.js');
           const jpeg = canvasToBase64Jpeg(toCanvas(bitmap, 1800, { rotate, crop }));
-          rows.push(...(await claudePairs(jpeg, apiKey, { frontLang: deck.frontLang, backLang: deck.backLang })));
+          rows.push(...(await claudePairs(jpeg, apiKey, { frontLang: deck.frontLang, backLang: deck.backLang, model })));
         } else {
           progress.textContent = `${which}Tekstherkenning laden… (de eerste keer kan dit even duren)`;
           const { ocrPairs } = await import('./ocr.js');
@@ -941,6 +949,11 @@ async function settingsView() {
         <label>Anthropic API-sleutel (voor Claude AI foto-herkenning)
           <input name="apiKey" type="password" autocomplete="off" placeholder="sk-ant-…" value="${esc(s.apiKey)}">
         </label>
+        <label>Claude-model
+          <select name="model">
+            ${CLAUDE_MODELS.map((m) => `<option value="${m.id}" ${m.id === s.model ? 'selected' : ''}>${m.name} – ${m.note}</option>`).join('')}
+          </select>
+        </label>
         <p class="muted small">Optioneel. Zonder sleutel gebruikt de app gratis tekstherkenning. Met een sleutel leest Claude de foto en maakt nettere kaartjes
         (kost een paar cent per foto). Een sleutel maak je op <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>.
         De sleutel wordt alleen op deze Chromebook bewaard en gaat rechtstreeks naar Anthropic.</p>
@@ -957,6 +970,7 @@ async function settingsView() {
     await db.setMeta('newPerDay', Math.max(1, Number(f.newPerDay.value) || 20));
     await db.setMeta('speak', f.speak.checked);
     await db.setMeta('apiKey', f.apiKey.value.trim());
+    await db.setMeta('model', f.model.value);
     toast('Instellingen opgeslagen', 'ok');
   };
 }

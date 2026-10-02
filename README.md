@@ -35,7 +35,8 @@ Lokaal uitproberen: `npm start` en open <http://localhost:8080>.
 
 1. Maak een API-sleutel op <https://console.anthropic.com/settings/keys> en zet er wat tegoed op.
 2. Open in de app ⚙ *Instellingen* en plak de sleutel.
-3. Bij *Foto → kaartjes* staat nu *Claude AI* als keuze. Een foto kost ongeveer een paar cent.
+3. Kies het model: **Claude Opus 5.5** (beste resultaat, ± 5–10 cent per bladzijde) of **Claude Sonnet 5.5** (goedkoper, ± 2–5 cent per bladzijde). Dit zijn schattingen; de echte kosten hangen af van de foto en het aantal woordjes.
+4. Bij *Foto → kaartjes* staat nu Claude als keuze.
 
 De sleutel wordt alleen lokaal in de browser bewaard en rechtstreeks naar de Anthropic API gestuurd. Deel het apparaat niet met mensen die de sleutel niet mogen gebruiken.
 Als Claude een verzoek weigert, schakelt de API automatisch over op een ander model (de optie `fallbacks: "default"`).
