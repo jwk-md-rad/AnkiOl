@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { newState, schedule, AGAIN, HARD, GOOD, EASY, MINUTE, previewLabels } from '../js/srs.js';
 import { checkAnswer, normalize } from '../js/check.js';
-import { pairsFromText, pairsFromWords, plausible } from '../js/parse.js';
+import { pairsFromText, pairsFromLines, plausible } from '../js/parse.js';
 import { Session } from '../js/session.js';
 
 const NOW = new Date('2026-10-02T15:00:00').getTime();
@@ -79,28 +79,62 @@ test('tekst plakken wordt gesplitst in paren', () => {
   );
 });
 
-test('OCR-woorden: kolommen, uitspraak, zijvak, kopjes en schuine foto', () => {
-  // Woorden als [tekst, x0, y, breedte, hoogte, betrouwbaarheid]; pagina 2° scheef.
-  const tan = Math.tan((2 * Math.PI) / 180);
-  const w = (text, x0, y, width, h = 20, confidence = 90) => {
-    const dy = x0 * tan;
-    return { text, confidence, bbox: { x0, x1: x0 + width, y0: y + dy, y1: y + dy + h } };
-  };
-  const words = [
-    w('Unit', 400, 0, 80, 34), w('3', 490, 0, 20, 34), w('Words', 900, 0, 90, 34),
-    w('Tip!', 20, 100, 50), w('Leer', 80, 100, 50),
-    w('brother', 400, 100, 90), w('[brʌðə]', 650, 100, 80, 20, 50), w('broer', 900, 100, 60),
-    w('Say', 20, 140, 40), w('this', 70, 140, 40),
-    w('to', 400, 140, 25), w('be', 430, 140, 25), w('married', 460, 140, 80), w('[ˈmærid]', 650, 140, 80, 20, 40), w('getrouwd', 900, 140, 90), w('zijn', 995, 140, 40),
-    w('cousin', 400, 180, 70), w('[kʌzn]', 650, 180, 70), w('neef,', 900, 180, 50), w('nicht', 955, 180, 50),
-    w('~|', 400, 220, 20, 20, 20), w('aunt', 400, 260, 50), w('[ɑːnt]', 650, 260, 60), w('tante', 900, 260, 60),
+// Nagebootste OCR-uitvoer zoals Tesseract die geeft (elke regel met woorden,
+// posities en basislijn), van een scheve, buigende leerboekpagina.
+function fakeOcr(cells, { slope = (x, y) => -0.08 + y / 20000 } = {}) {
+  const H = 30;
+  return cells.map(([text, x, row, conf = 92]) => {
+    const words = [];
+    let cx = x;
+    const y0 = 60 + row * 55;
+    for (const t of text.split(' ')) {
+      const w = t.length * 16;
+      const m = slope(cx, y0);
+      const yb = y0 + m * cx;
+      words.push({ text: t, confidence: conf, bbox: { x0: cx, x1: cx + w, y0: yb - H, y1: yb }, baseline: { x0: cx, x1: cx + w, y0: yb, y1: yb + m * w, has_baseline: true } });
+      cx += w + 12;
+    }
+    const f = words[0];
+    const l = words[words.length - 1];
+    return { words, baseline: { x0: f.baseline.x0, y0: f.baseline.y0, x1: l.baseline.x1, y1: l.baseline.y1 } };
+  });
+}
+
+test('OCR-pagina: twee tabellen, schuin, vakjes, getallen, kopjes, doorlopende woordjes', () => {
+  const cells = [
+    ['B Looks', 60, 0], ['Uiterlijk', 360, 0],
+    ['O bald', 60, 1], ['kaal', 360, 1],
+    ['[J beard', 60, 2], ['[brɪəd]', 230, 2, 60], ['baard', 360, 2],
+    ['WW scar', 60, 3], ['litteken', 360, 3],
+    ['thirty', 60, 4], ['30', 360, 4],
+    ['O great-', 60, 5], ['overgrootvader', 360, 5],
+    ['grandfather', 60, 6],
+    ['one thousand', 60, 7],
+    ['and eleven', 60, 8], ['1011', 360, 8],
+    ['O nephew', 60, 9], ['neef (kind van', 360, 9],
+    ['zus/broer)', 360, 10],
+    ['O shy', 800, 1], ['verlegen', 1100, 1],
+    ['O smart', 800, 2], ['slim', 1100, 2],
+    ['O sweet', 800, 3], ['lief', 1100, 3],
+    ['O mean', 800, 4], ['gemeen', 1100, 4],
+    ['~|', 800, 5, 20],
   ];
-  const angle = Math.atan(tan);
-  const rows = pairsFromWords(words, angle);
+  const rows = pairsFromLines(fakeOcr(cells));
   const ok = rows.filter((r) => r.ok).map((r) => `${r.front} = ${r.back}`);
-  assert.deepEqual(ok, ['brother = broer', 'to be married = getrouwd zijn', 'cousin = neef, nicht', 'aunt = tante']);
-  assert.ok(rows.some((r) => r.front === 'Unit 3' && r.back === 'Words' && !r.ok), 'kopje niet aangevinkt');
-  assert.ok(!rows.some((r) => /Tip|Say/.test(r.front + r.back)), 'zijvak genegeerd');
+  assert.deepEqual(ok, [
+    'bald = kaal',
+    'beard = baard',
+    'scar = litteken',
+    'thirty = 30',
+    'great-grandfather = overgrootvader',
+    'one thousand and eleven = 1011',
+    'nephew = neef (kind van zus/broer)',
+    'shy = verlegen',
+    'smart = slim',
+    'sweet = lief',
+    'mean = gemeen',
+  ]);
+  assert.ok(rows.some((r) => r.front === 'Looks' && r.back === 'Uiterlijk' && !r.ok), 'kopje niet aangevinkt');
 });
 
 test('plausible herkent OCR-rommel', () => {
@@ -109,6 +143,7 @@ test('plausible herkent OCR-rommel', () => {
   assert.equal(plausible('oY) ga. 0'), false);
   assert.equal(plausible('§'), false);
   assert.equal(plausible('stiefvader', 30), false);
+  assert.equal(plausible('1011'), true);
 });
 
 test('sessie: nieuwe kaarten max per dag, één richting per kaart', () => {
