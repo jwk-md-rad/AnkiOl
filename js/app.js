@@ -47,7 +47,7 @@ function speak(text, lang) {
   speechSynthesis.speak(u);
 }
 
-// Hoeveel nieuwe kaarten er vandaag nog geleerd mogen worden (per lijst).
+// Hoeveel nieuwe kaarten er vandaag nog geleerd mogen worden (per hoofdstuk).
 async function newLeftToday(deckId, perDay) {
   const today = new Date().toDateString();
   const rec = await db.getMeta(`new:${deckId}`, null);
@@ -118,11 +118,11 @@ async function homeView() {
 
   render(`
     <section class="panel">
-      <div class="row spread"><h2>Mijn lijsten</h2><a href="#/uitleg" class="help-link">❓ Hoe werkt het?</a></div>
-      ${rows || '<p class="muted">Nog geen lijsten. Maak hieronder je eerste lijst aan.</p>'}
+      <div class="row spread"><h2>Mijn hoofdstukken</h2><a href="#/uitleg" class="help-link">❓ Hoe werkt het?</a></div>
+      ${rows || '<p class="muted">Nog geen hoofdstukken. Maak hieronder je eerste hoofdstuk aan.</p>'}
       <form id="newDeck" class="row">
-        <input name="name" placeholder="Naam nieuwe lijst, bv. Engels H3" required maxlength="80">
-        <button class="primary">+ Lijst maken</button>
+        <input name="name" placeholder="Naam, bv. Engels H4" required maxlength="80">
+        <button class="primary">+ Nieuw hoofdstuk</button>
       </form>
       <p class="legend muted"><span class="c-new">nieuw</span> <span class="c-learn">aan het leren</span> <span class="c-review">te herhalen</span></p>
     </section>
@@ -156,7 +156,7 @@ async function homeView() {
     if (!file) return;
     try {
       const res = await db.importAll(JSON.parse(await file.text()));
-      toast(`${res.decks} lijsten en ${res.cards} woordjes teruggezet`, 'ok');
+      toast(`${res.decks} hoofdstukken en ${res.cards} woordjes teruggezet`, 'ok');
       route();
     } catch (err) {
       toast(err.message, 'bad');
@@ -175,7 +175,7 @@ async function deckView(deck) {
       .join('');
 
   render(`
-    <nav class="crumbs"><a href="#/">← Lijsten</a></nav>
+    <nav class="crumbs"><a href="#/">← Hoofdstukken</a></nav>
     <section class="panel">
       <div class="row spread">
         <h2>${esc(deck.name)}</h2>
@@ -215,12 +215,12 @@ async function deckView(deck) {
       ${cards.length ? '' : '<p class="muted">Nog geen woordjes. Voeg ze toe met een foto of door ze te typen.</p>'}
     </section>
     <section class="panel">
-      <h3>Lijst-instellingen</h3>
+      <h3>Instellingen van dit hoofdstuk</h3>
       <form id="deckForm" class="grid">
         <label>Naam <input name="name" value="${esc(deck.name)}" required></label>
         <label>Voorkant <select name="frontLang">${langOpts(deck.frontLang)}</select></label>
         <label>Achterkant <select name="backLang">${langOpts(deck.backLang)}</select></label>
-        <div class="row"><button>Opslaan</button><button type="button" id="delDeck" class="danger">Lijst verwijderen</button></div>
+        <div class="row"><button>Opslaan</button><button type="button" id="delDeck" class="danger">Hoofdstuk verwijderen</button></div>
       </form>
     </section>`);
 
@@ -255,7 +255,7 @@ async function deckView(deck) {
     route();
   };
   document.getElementById('delDeck').onclick = async () => {
-    if (!confirm(`Lijst "${deck.name}" met ${cards.length} woordjes definitief verwijderen?`)) return;
+    if (!confirm(`Hoofdstuk "${deck.name}" met ${cards.length} woordjes definitief verwijderen?`)) return;
     await db.deleteDeck(deck.id);
     location.hash = '#/';
   };
@@ -291,7 +291,7 @@ function reviewTable(deck, rows, existing) {
           <button type="button" class="addrow">+ Regel</button>
         </div>
       </div>
-      <p class="muted">Vink uit wat je niet wilt leren en verbeter fouten. Grijze regels konden niet automatisch gesplitst worden of staan al in de lijst.</p>
+      <p class="muted">Vink uit wat je niet wilt leren en verbeter fouten. Grijze regels konden niet automatisch gesplitst worden of staan al in dit hoofdstuk.</p>
       <table class="cards review">
         <thead><tr><th></th><th>${esc(LANGS[deck.frontLang])}</th><th>${esc(LANGS[deck.backLang])}</th><th></th></tr></thead>
         <tbody>
@@ -301,7 +301,7 @@ function reviewTable(deck, rows, existing) {
             <tr data-i="${i}" class="${r.ok ? '' : 'off'}">
               <td><input type="checkbox" class="ok" ${r.ok ? 'checked' : ''}></td>
               <td><input class="f" value="${esc(r.front)}"></td>
-              <td><input class="b" value="${esc(r.back)}">${r.dup ? '<small class="muted">staat al in lijst</small>' : ''}</td>
+              <td><input class="b" value="${esc(r.back)}">${r.dup ? '<small class="muted">staat er al in</small>' : ''}</td>
               <td><button type="button" class="icon del" title="Weghalen">✕</button></td>
             </tr>`
             )
@@ -688,7 +688,7 @@ async function studyView(deck, cards, { mode, dir, cram, newLeft }) {
         <h2>Klaar voor nu!</h2>
         <p>${session.stats.answered} kaartjes beantwoord${session.stats.answered ? `, ${pct}% in één keer goed` : ''}.</p>
         ${left.length ? `<p class="muted">Nog ${left.length} kaartjes aan het leren; kom over ongeveer ${formatMs(soon)} terug.</p>` : '<p class="muted">Alles gedaan voor vandaag. Kom morgen terug voor de herhalingen!</p>'}
-        <div class="row center"><a class="button primary" href="#/deck/${deck.id}">Terug naar lijst</a><a class="button" href="#/">Alle lijsten</a></div>
+        <div class="row center"><a class="button primary" href="#/deck/${deck.id}">Terug naar hoofdstuk</a><a class="button" href="#/">Alle hoofdstukken</a></div>
       </div>`;
   }
 
@@ -731,14 +731,14 @@ const HELP_STEPS = [
   },
   {
     emoji: '📚',
-    title: 'Maak een lijst',
+    title: 'Maak een hoofdstuk',
     text: 'Typ een naam, bijvoorbeeld <b>Engels H4</b>.',
-    demo: '<span class="demo-input">Engels H4</span><span class="demo-btn primary">+ Lijst maken</span>',
+    demo: '<span class="demo-input">Engels H4</span><span class="demo-btn primary">+ Nieuw hoofdstuk</span>',
   },
   {
     emoji: '📷',
     title: 'Foto van je boek',
-    text: 'Open je lijst. Tik op <b>Foto → kaartjes</b>.<br>Foto <b>recht</b> en <b>scherp</b>.',
+    text: 'Open je hoofdstuk. Tik op <b>Foto → kaartjes</b>.<br>Foto <b>recht</b> en <b>scherp</b>.',
     demo: '<span class="demo-btn">📷 Foto → kaartjes</span>',
   },
   {
@@ -817,11 +817,11 @@ async function settingsView() {
   const s = await settings.get();
   const persisted = navigator.storage && navigator.storage.persisted ? await navigator.storage.persisted() : false;
   render(`
-    <nav class="crumbs"><a href="#/">← Lijsten</a></nav>
+    <nav class="crumbs"><a href="#/">← Hoofdstukken</a></nav>
     <section class="panel">
       <h2>Instellingen</h2>
       <form id="settings" class="grid">
-        <label>Nieuwe woordjes per dag (per lijst)
+        <label>Nieuwe woordjes per dag (per hoofdstuk)
           <input name="newPerDay" type="number" min="1" max="500" value="${s.newPerDay}">
         </label>
         <label class="inline"><input type="checkbox" name="speak" ${s.speak ? 'checked' : ''}> Woordjes voorlezen</label>

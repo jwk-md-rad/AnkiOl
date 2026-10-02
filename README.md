@@ -5,10 +5,11 @@ Een AnkiWeb-achtige app om woordjes en zinnen te overhoren (Engels ↔ Nederland
 - **Foto → kaartjes**: maak een foto van de woordenlijst in je leerboek (of kies een bestaande foto) en de app maakt de kaartjes. Daarna controleer en verbeter je ze voordat ze worden opgeslagen.
   - *Gratis tekstherkenning* (Tesseract OCR, in de browser): herkent kolommen zoals `the teacher    de leraar` of `house - huis`.
   - *Claude AI* (optioneel, met eigen Anthropic API-sleutel): beter in lastige layouts, voorbeeldzinnen, fonetisch schrift weglaten en EN/NL automatisch op de goede kant zetten.
+- Woordjes per **hoofdstuk** (bijvoorbeeld *Engels H4*), zoals in het leerboek.
 - **Spaced repetition** zoals Anki (SM-2): nieuwe woordjes komen terug na 1 en 10 minuten, daarna na 1 dag, en steeds langere tijd zolang je ze goed weet. Fout = vaker oefenen.
 - **Per sessie kiezen**: *omdraaien en zelf beoordelen* (Opnieuw / Moeilijk / Goed / Makkelijk) of *antwoord intypen* (tolerant voor hoofdletters, accenten, lidwoorden en kleine typfouten).
 - Richting kiezen: Engels → Nederlands, Nederlands → Engels of beide (elke richting heeft een eigen planning).
-- *Alles oefenen* (toetsmodus): alle woordjes van een lijst langs, zonder de planning te verstoren.
+- *Alles oefenen* (toetsmodus): alle woordjes van een hoofdstuk langs, zonder de planning te verstoren.
 - Voorlezen van Engelse woorden (spraak van Chrome).
 - Werkt **offline** en kan geïnstalleerd worden als app. Gegevens staan lokaal op de Chromebook; met *Back-up downloaden* maak je een kopie (bv. in Google Drive).
 
