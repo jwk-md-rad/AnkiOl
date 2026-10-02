@@ -55,9 +55,11 @@ export function toCanvas(bitmap, maxSide, { grayscale = false, rotate = 0, crop 
   canvas.height = Math.max(1, Math.round(ch * scale));
   const ctx = canvas.getContext('2d');
   ctx.scale(scale, scale);
-  ctx.translate(-cx + rw / 2, -cy + rh / 2);
-  ctx.rotate((rotate * Math.PI) / 180);
-  ctx.drawImage(bitmap, -W / 2, -H / 2, W, H);
+  ctx.translate(-cx, -cy);
+  // Draaien in hele pixels (geen halve-pixel-verschuiving die de tekst vervaagt).
+  const turn = { 0: [1, 0, 0, 1, 0, 0], 90: [0, 1, -1, 0, H, 0], 180: [-1, 0, 0, -1, W, H], 270: [0, -1, 1, 0, 0, W] };
+  ctx.transform(...turn[((rotate % 360) + 360) % 360]);
+  ctx.drawImage(bitmap, 0, 0, W, H);
   if (grayscale) {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     const img = ctx.getImageData(0, 0, canvas.width, canvas.height);

@@ -55,7 +55,7 @@ export function plausible(text, conf = 100) {
 const SHORT_WORDS = /^(a|an|to|the|be|go|do|no|so|my|on|in|at|up|of|or|it|is|i|he|we|us|me|by|if|as|en|de|het|een|te|op|er|ik|je|wij|zij|ze)$/i;
 
 function isMark(t) {
-  if (SHORT_WORDS.test(t)) return false;
+  if (SHORT_WORDS.test(t) && (/^\p{Ll}+$/u.test(t) || t === 'I')) return false;
   // Kort woord van alleen kleine letters met een klinker ("one", "two") is echt.
   if (/^\p{Ll}+$/u.test(t) && /[aeiouy]/.test(t)) return false;
   return t.length <= 3;
@@ -128,12 +128,24 @@ const PHONETIC = /[[\]/]|[ˈˌːəʌæɪʊɔθðʃʒŋɑɜ]/u;
 const CONTINUES = /^(and|or|of|en|van)\b/;
 
 // Schuinte van de tekst, gemeten aan de basislijn van de langere woorden.
-function wordSlope(words, H) {
+// Schuinte van de tekst. Uit de vakken (box): bij meerdere woorden zonder
+// uitstekende letters (g, j, p, q, y, komma) liggen de onderkanten op de echte
+// basislijn. Uit Tesseract (tess): diens basislijn, die bij schuine foto's soms
+// vlak getrokken is en dus minder betrouwbaar.
+function wordSlopes(words, H) {
+  let box = null;
+  const flat = words.filter((w) => !/[gjpqy,;]/.test(w.text));
+  if (flat.length >= 2) {
+    const first = flat[0];
+    const last = flat[flat.length - 1];
+    const dx = (last.bbox.x0 + last.bbox.x1) / 2 - (first.bbox.x0 + first.bbox.x1) / 2;
+    if (dx >= H * 2.5) box = (last.bbox.y1 - first.bbox.y1) / dx;
+  }
   const ms = words
     .map((w) => w.baseline)
     .filter((b) => b && b.has_baseline !== false && b.x1 - b.x0 >= H * 2.5)
     .map((b) => (b.y1 - b.y0) / (b.x1 - b.x0));
-  return ms.length ? median(ms) : null;
+  return { box, tess: ms.length ? median(ms) : null };
 }
 
 function segmentsFromLines(lines) {
@@ -178,7 +190,7 @@ function segmentsFromLines(lines) {
         x0,
         x1,
         y,
-        textSlope: wordSlope(g, H),
+        ...wordSlopes(g0.filter((w) => w.text.trim()), H),
         heading,
       });
     }
@@ -215,14 +227,19 @@ function matchColumns(A, B, H, globalSlope) {
   // De bladzijde buigt: per kolompaar de eigen helling. Startpunt is de
   // schuinte van de woorden zelf; daarna fijn zoeken in een klein bereik
   // (een groot bereik vindt ook hellingen die precies één regel verschoven zijn).
-  const own = [...A.segs, ...B.segs].map((s) => s.textSlope).filter((m) => m !== null);
-  const m0 = own.length >= 3 ? median(own) : globalSlope;
+  const both = [...A.segs, ...B.segs];
+  const box = both.map((s) => s.box).filter((m) => m !== null);
+  const tess = both.map((s) => s.tess).filter((m) => m !== null);
+  // Genoeg metingen uit de vakken? Dan die; anders Tesseract's basislijnen.
+  const useBox = box.length >= 5 && box.length >= tess.length * 0.25;
+  const m0 = useBox ? median(box) : tess.length >= 3 ? median(tess) : box.length ? median(box) : globalSlope;
+  const slopeOfSeg = (s) => (useBox ? s.box : s.tess ?? s.box);
   const slope = findSlope(A.segs, B.segs, H, Infinity, m0 - 0.04, m0 + 0.04, 0.0025);
   // Helling ter plekke: schuinte van de woorden in de buurt (boven/onder).
-  const withSlope = [...A.segs, ...B.segs].filter((s) => s.textSlope !== null);
+  const withSlope = both.filter((s) => slopeOfSeg(s) !== null);
   const localSlope = (a) => {
     const near = [...withSlope].sort((p, q) => Math.abs(p.y - a.y) - Math.abs(q.y - a.y)).slice(0, 6);
-    return near.length >= 3 ? slope + (median(near.map((s) => s.textSlope)) - m0) : slope;
+    return near.length >= 3 ? slope + (median(near.map(slopeOfSeg)) - m0) : slope;
   };
   const as = [...A.segs].sort((p, q) => p.y - q.y);
   const slopeOf = new Map(as.map((a) => [a, localSlope(a)]));
@@ -277,6 +294,12 @@ function matchColumns(A, B, H, globalSlope) {
   return pairs;
 }
 
+// Hoe Nederlands ziet een kolom eruit (0–1)? Alleen als hulp bij twijfel.
+const DUTCH = /ij|aa|uu|ui|sch|cht|\b(de|het|een|van|op|zijn|niet|voor|en)\b/i;
+function dutchness(col) {
+  return col.segs.filter((s) => DUTCH.test(s.text)).length / col.segs.length;
+}
+
 // Kies welke kolommen samen woord ↔ vertaling vormen.
 function pickColumnPairs(cols, H, slope) {
   const max = Math.max(...cols.map((c) => c.segs.length));
@@ -285,28 +308,39 @@ function pickColumnPairs(cols, H, slope) {
     // Uitspraak-kolom ([ˈbrʌðə]) en kolommen vol OCR-rommel overslaan.
     .filter((c) => c.segs.filter((s) => PHONETIC.test(s.text) || s.conf < 60 || !plausible(s.text, s.conf)).length < c.segs.length * 0.5)
     .sort((a, b) => a.center - b.center);
-  const result = [];
-  let best = 0;
-  // Steeds de twee naast elkaar liggende kolommen met de meeste koppels.
-  while (main.length >= 2) {
-    let pick = 0;
-    let pickMatches = matchColumns(main[0], main[1], H, slope);
-    for (let k = 1; k < main.length - 1; k++) {
-      const m = matchColumns(main[k], main[k + 1], H, slope);
-      if (m.length > pickMatches.length) {
-        pick = k;
-        pickMatches = m;
-      }
-    }
-    if (pickMatches.length < 2 || pickMatches.length < best * 0.3) break;
-    best = Math.max(best, pickMatches.length);
-    const [A, B] = main.splice(pick, 2);
-    result.push({ A, B, matches: pickMatches });
+  // Beste indeling van alle kolommen in paren naast elkaar (zoals EN|NL EN|NL EN|NL):
+  // zoveel mogelijk koppels in totaal. Nederlands staat meestal rechts.
+  const n = main.length;
+  const pairInfo = [];
+  for (let k = 0; k < n - 1; k++) {
+    const matches = matchColumns(main[k], main[k + 1], H, slope);
+    const flipped = dutchness(main[k]) > dutchness(main[k + 1]) + 0.15;
+    pairInfo.push({ matches, weight: matches.length >= 2 ? matches.length * (flipped ? 0.6 : 1) : 0 });
   }
+  const best = new Float64Array(n + 1);
+  const took = new Uint8Array(n + 1);
+  for (let i = 2; i <= n; i++) {
+    best[i] = best[i - 1];
+    const w = pairInfo[i - 2].weight;
+    if (w > 0 && best[i - 2] + w > best[i]) {
+      best[i] = best[i - 2] + w;
+      took[i] = 1;
+    }
+  }
+  const result = [];
+  const paired = new Set();
+  for (let i = n; i >= 2; ) {
+    if (took[i]) {
+      result.push({ A: main[i - 2], B: main[i - 1], matches: pairInfo[i - 2].matches });
+      paired.add(main[i - 2]).add(main[i - 1]);
+      i -= 2;
+    } else i--;
+  }
+  const leftover = main.filter((c) => !paired.has(c));
   result.sort((a, b) => a.A.center - b.A.center);
   // Overgebleven kolom (bv. getallen die iets verder rechts staan dan de
   // vertalingen eronder): koppel aan de woordkolom links ervan.
-  for (const L of main) {
+  for (const L of leftover) {
     const owner = [...result].reverse().find((r) => r.A.center < L.center);
     if (!owner) continue;
     const used = new Set(owner.matches.map(([a]) => a));
@@ -321,7 +355,7 @@ function pickColumnPairs(cols, H, slope) {
 }
 
 function joinText(first, second) {
-  return /-$/.test(first) ? first + second : `${first} ${second}`;
+  return /[-/]$/.test(first) ? first + second : `${first} ${second}`;
 }
 
 const unclosed = (t) => (t.match(/\(/g) || []).length > (t.match(/\)/g) || []).length;
@@ -336,7 +370,7 @@ function attachContinuations(col, side, rowsBySeg, used, spacing, rotY) {
     const near = (o) => o && Math.abs(rotY(o) - rotY(s)) < spacing * 1.6;
     if (near(prev) && rowsBySeg.has(prev)) {
       const row = rowsBySeg.get(prev);
-      if (/[-,]$/.test(row[side]) || unclosed(row[side])) {
+      if (/[-,/]$/.test(row[side]) || unclosed(row[side])) {
         row[side] = joinText(row[side], s.text);
         used.add(s);
         rowsBySeg.set(s, row);

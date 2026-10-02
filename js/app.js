@@ -523,7 +523,8 @@ async function photoView(deck) {
           progress.textContent = `${which}Tekstherkenning laden… (de eerste keer kan dit even duren)`;
           const { ocrPairs } = await import('./ocr.js');
           const res = await ocrPairs(toCanvas(bitmap, 2400, { rotate, crop, grayscale: true }), (m) => {
-            if (m.status === 'recognizing text') progress.textContent = `${which}Tekst herkennen… ${Math.round(m.progress * 100)}%`;
+            if (m.status === 'Stand van de foto bepalen') progress.textContent = `${which}Stand van de foto bepalen…`;
+            else if (m.status === 'recognizing text') progress.textContent = `${which}Tekst herkennen… ${Math.round(m.progress * 100)}%`;
           });
           rows.push(...res.rows);
         }
