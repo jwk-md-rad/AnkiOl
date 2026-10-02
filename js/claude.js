@@ -135,6 +135,10 @@ daarna zelf na met jouw antwoord. Doe dit:
 3. Geef elke oefening 4 tot 6 "variants" die het patroon steeds net anders gebruiken: andere namen, datums, leeftijden,
    plaatsen, landen, nationaliteiten, schoolvakken, werkwoorden en vocabulaire, zoals de school vraagt. Blijf bij de grammatica
    en het niveau van de Stone (A1–A2), Brits Engels zoals het boek.
+   Belangrijk: GEEN enkele variant is letterlijk een zin uit het boek; de zinnen uit het boek zijn alleen het voorbeeld van de
+   zinsbouw. Elke variant verandert minstens twee dingen ten opzichte van het boek en van de andere varianten. Gebruik ook andere
+   personen waar de zinsbouw dat toelaat (he, she, my sister, they, Tom en Lisa), zodat de leerling de zinsbouw toepast in plaats
+   van één zin uit zijn hoofd te leren.
 4. "pattern" is het patroon in het Engels met het variabele deel tussen haakjes, bv. "When is your birthday? – My birthday is on the (17th) of (May)."
 5. "alternatives": andere goede antwoorden (bv. "I'm" naast "I am", "It's" naast "It is", andere woordvolgorde die ook klopt).
    Laat leeg als er geen zijn.
@@ -153,4 +157,65 @@ De foto kan scheef of op z'n kant staan. Is het geen Stone of is hij onleesbaar,
     }))
     .filter((e) => e.variants.length);
   return { title: parsed.title.trim(), exercises };
+}
+
+// ---------- Nieuwe varianten bijmaken (zonder foto) ----------
+
+const MORE_SCHEMA = {
+  type: 'object',
+  properties: {
+    items: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          variants: STONE_SCHEMA.properties.exercises.items.properties.variants,
+        },
+        required: ['id', 'variants'],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ['items'],
+  additionalProperties: false,
+};
+
+// Voor elke Stone-oefening een paar nieuwe varianten, anders dan de bestaande.
+// exercises: [{ id, stone, type, pattern, variants }]. Geeft { id: [varianten] }.
+export async function claudeMoreVariants(exercises, apiKey, { model = 'claude-opus-5-5', count = 4 } = {}) {
+  const list = exercises.map((e) => ({
+    id: e.id,
+    stone: e.stone,
+    soort: e.type,
+    zinsbouw: e.pattern,
+    al_gebruikt: e.variants.map((v) => `${v.prompt} → ${v.answer}`),
+  }));
+  const prompt = `Je maakt oefenzinnen voor een Nederlandse brugklasleerling (12–13 jaar) die de "Stones" uit het Engelse schoolboek
+Stepping Stones leert: zinsbouw-schema's die je moet kunnen toepassen met steeds andere woorden. De school zegt: "Herhaal,
+varieer en schrijf op! Verander de onderwerpen, werkwoorden en andere vocabulaire." De leerling schrijft het antwoord op
+papier en kijkt zelf na.
+
+Hieronder staan oefeningen (JSON). Maak voor elke oefening ${count} NIEUWE varianten van dezelfde soort en met dezelfde zinsbouw:
+- "translate": "prompt" een natuurlijke Nederlandse zin, "answer" de Engelse zin volgens de zinsbouw.
+- "answer": "prompt" een Engelse vraag volgens de zinsbouw, "answer" een voorbeeldantwoord in een volledige Engelse zin.
+- "gap": "prompt" een Engelse zin met "___" op de plek van het belangrijke stuk uit de zinsbouw, "answer" alleen de
+  ontbrekende woorden; zet er een Nederlandse hint tussen haakjes achter als het anders niet te raden is.
+Regels:
+- Elke nieuwe variant moet duidelijk anders zijn dan alles in "al_gebruikt" en dan de andere nieuwe varianten: verander
+  minstens twee dingen (namen, personen, datums, getallen, plaatsen, landen, schoolvakken, werkwoorden, onderwerpen).
+- Blijf bij de zinsbouw en het niveau (A1–A2), Brits Engels. Verzin geen nieuwe grammatica.
+- "alternatives": andere goede antwoorden (bv. "I'm" naast "I am"), of leeg.
+- Geef in "items" voor elke oefening het "id" terug, precies zoals het hieronder staat.
+
+${JSON.stringify(list, null, 1)}`;
+
+  const parsed = await askClaude({ images: [], prompt, schema: MORE_SCHEMA, apiKey, model, maxTokens: 16000 });
+  const out = {};
+  for (const item of parsed.items) {
+    out[item.id] = item.variants
+      .map((v) => ({ prompt: v.prompt.trim(), answer: v.answer.trim(), alternatives: v.alternatives.map((a) => a.trim()).filter(Boolean) }))
+      .filter((v) => v.prompt && v.answer);
+  }
+  return out;
 }

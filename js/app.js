@@ -1,6 +1,6 @@
 import * as db from './db.js';
 import { previewLabels, AGAIN, HARD, GOOD, EASY, formatMs } from './srs.js';
-import { Session, countDue, nextVariant } from './session.js';
+import { Session, countDue, nextVariant, needsMoreVariants, addVariants } from './session.js';
 import { checkAnswer, normalize } from './check.js';
 import { pairsFromText } from './parse.js';
 import { loadImage, toCanvas, canvasToBase64Jpeg, isHeic, isImageFile } from './image.js';
@@ -199,6 +199,7 @@ async function deckView(deck) {
         <a class="button primary big" href="#/deck/${deck.id}/study">▶ Overhoren</a>
         <a class="button big" href="#/deck/${deck.id}/photo">📷 Foto → kaartjes</a>
         <a class="button big" href="#/deck/${deck.id}/stone">📘 Stone → oefeningen</a>
+        ${cards.some((c) => c.kind === 'stone') ? '<button id="moreStone" class="big">🔄 Nieuwe Stone-zinnen</button>' : ''}
         <a class="button big" href="#/deck/${deck.id}/add">✎ Typen / plakken</a>
       </div>
     </section>
@@ -268,6 +269,21 @@ async function deckView(deck) {
     toast('Opgeslagen', 'ok');
     route();
   };
+  const more = document.getElementById('moreStone');
+  if (more) {
+    more.onclick = async () => {
+      more.disabled = true;
+      more.textContent = '🔄 Nieuwe zinnen maken…';
+      try {
+        const added = await topUpStones(cards.filter((c) => c.kind === 'stone'));
+        toast(added ? `${added} nieuwe zinnen toegevoegd` : 'Geen nieuwe zinnen gemaakt', added ? 'ok' : 'bad');
+      } catch (err) {
+        console.error(err);
+        toast(friendlyError(err), 'bad');
+      }
+      route();
+    };
+  }
   document.getElementById('delDeck').onclick = async () => {
     if (!confirm(`Hoofdstuk "${deck.name}" met ${cards.length} woordjes definitief verwijderen?`)) return;
     await db.deleteDeck(deck.id);
@@ -683,6 +699,24 @@ function cropDialog(photo) {
   });
 }
 
+// Nieuwe varianten voor Stone-oefeningen laten maken door Claude en opslaan.
+// Geeft het aantal toegevoegde zinnen terug (0 zonder sleutel of internet).
+async function topUpStones(stoneCards) {
+  const { apiKey, model } = await settings.get();
+  if (!apiKey) throw new Error('Vul eerst een Claude API-sleutel in bij Instellingen.');
+  if (!navigator.onLine) throw new Error('Je bent offline. Nieuwe zinnen maken kan alleen met internet.');
+  const { claudeMoreVariants } = await import('./claude.js');
+  let added = 0;
+  // In porties, zodat één verzoek niet te groot wordt.
+  for (let i = 0; i < stoneCards.length; i += 12) {
+    const part = stoneCards.slice(i, i + 12);
+    const fresh = await claudeMoreVariants(part, apiKey, { model });
+    for (const card of part) added += addVariants(card, fresh[card.id] || []);
+    await db.putCards(part);
+  }
+  return added;
+}
+
 function friendlyError(err) {
   const status = err && err.status;
   if (status === 401) return 'De API-sleutel klopt niet. Controleer hem bij Instellingen.';
@@ -890,7 +924,14 @@ async function studyView(deck, cards, { mode, dir, cram, newLeft }) {
   async function rate(r) {
     if (phase !== 'answer') return;
     phase = 'saving';
-    if (isStone()) item.card.lastVariant = variant;
+    if (isStone()) {
+      item.card.lastVariant = variant;
+      // Laatste variant gehad: op de achtergrond nieuwe zinnen laten maken.
+      if (!cram && needsMoreVariants(item.card, variant)) {
+        const card = item.card;
+        topUpStones([card]).catch((err) => console.warn('Nieuwe Stone-zinnen lukten niet:', err.message));
+      }
+    }
     const { wasNew } = session.answer(item, r);
     if (!cram) {
       await db.putCards([item.card]);
