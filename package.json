@@ -1,0 +1,11 @@
+{
+  "name": "woordjes",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Woordjes leren met spaced repetition; kaartjes maken van foto's uit het leerboek.",
+  "type": "module",
+  "scripts": {
+    "start": "npx http-server -c-1 -p 8080 .",
+    "test": "node --test tests/*.test.js"
+  }
+}

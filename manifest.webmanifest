@@ -1,0 +1,16 @@
+{
+  "name": "Woordjes – overhoren met spaced repetition",
+  "short_name": "Woordjes",
+  "description": "Woordjes en zinnen leren. Maak kaartjes van foto's uit je leerboek.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4f6fb",
+  "theme_color": "#2f6fde",
+  "lang": "nl",
+  "icons": [
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml" },
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
