@@ -296,6 +296,10 @@ function matchColumns(A, B, H, globalSlope) {
 
 // Hoe Nederlands ziet een kolom eruit (0–1)? Alleen als hulp bij twijfel.
 const DUTCH = /ij|aa|uu|ui|sch|cht|\b(de|het|een|van|op|zijn|niet|voor|en)\b/i;
+function numeric(col) {
+  return col.segs.filter((s) => /^\d+$/.test(s.text.trim())).length / col.segs.length;
+}
+
 function dutchness(col) {
   return col.segs.filter((s) => DUTCH.test(s.text)).length / col.segs.length;
 }
@@ -315,7 +319,10 @@ function pickColumnPairs(cols, H, slope) {
   for (let k = 0; k < n - 1; k++) {
     const matches = matchColumns(main[k], main[k + 1], H, slope);
     const flipped = dutchness(main[k]) > dutchness(main[k + 1]) + 0.15;
-    pairInfo.push({ matches, weight: matches.length >= 2 ? matches.length * (flipped ? 0.6 : 1) : 0 });
+    // Een kolom met alleen getallen is altijd de vertaling, nooit het woord zelf.
+    const numbersFirst = numeric(main[k]) > 0.6 && numeric(main[k + 1]) < 0.3;
+    const weight = matches.length >= 2 && !numbersFirst ? matches.length * (flipped ? 0.6 : 1) : 0;
+    pairInfo.push({ matches, weight });
   }
   const best = new Float64Array(n + 1);
   const took = new Uint8Array(n + 1);
