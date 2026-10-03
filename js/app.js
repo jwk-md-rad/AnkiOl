@@ -1158,7 +1158,7 @@ async function settingsView() {
     await db.setMeta('model', f.model.value);
     toast('Instellingen opgeslagen', 'ok');
   };
-  preloadGoogle();
+  if (s.clientId) preloadGoogle();
   document.getElementById('syncForm').onsubmit = async (e) => {
     e.preventDefault();
     await db.setMeta('googleClientId', e.target.clientId.value.trim());
