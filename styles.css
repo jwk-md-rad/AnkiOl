@@ -216,6 +216,47 @@ kbd { font-size: 0.7rem; opacity: 0.7; border: 1px solid currentColor; border-ra
 .ios-tip ol { margin: 6px 0 0; padding-left: 22px; }
 #syncBtn { font-size: 1.1rem; }
 
+/* Aanmoedigingen ("gifjes") */
+.cheer {
+  position: fixed; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center;
+  background: rgba(0, 0, 0, .35); overflow: hidden; animation: cheer-in .2s ease-out;
+}
+.cheer.cheer-out { animation: cheer-fade .25s ease-in forwards; }
+.cheer-card {
+  background: var(--panel); border-radius: 24px; padding: 28px 36px; text-align: center;
+  box-shadow: 0 10px 40px rgba(0,0,0,.3); animation: cheer-zoom .35s cubic-bezier(.2, 1.6, .4, 1);
+  max-width: 86vw;
+}
+.cheer-emoji { font-size: 6rem; line-height: 1.1; display: inline-block; }
+.cheer-text { font-size: clamp(1.8rem, 7vw, 2.6rem); font-weight: 800; margin-top: 8px; color: var(--primary); }
+.cheer-count { font-size: 1.1rem; color: var(--muted); margin-top: 4px; }
+.move-pop { animation: m-pop .7s ease-out infinite alternate; }
+.move-pulse { animation: m-pulse .5s ease-in-out infinite alternate; }
+.move-flex { animation: m-flex .45s ease-in-out infinite alternate; transform-origin: 70% 90%; }
+.move-rocket { animation: m-rocket 1.2s ease-in-out infinite; }
+.move-spin { animation: m-spin 1.2s linear infinite; }
+.move-bounce { animation: m-bounce .6s cubic-bezier(.3, 0, .7, 1) infinite alternate; }
+.move-clap { animation: m-clap .25s ease-in-out infinite alternate; }
+.confetti {
+  position: absolute; top: -12px; width: 10px; height: 16px; border-radius: 2px;
+  animation-name: m-fall; animation-timing-function: linear; animation-fill-mode: forwards;
+}
+@keyframes cheer-in { from { opacity: 0; } }
+@keyframes cheer-fade { to { opacity: 0; } }
+@keyframes cheer-zoom { from { transform: scale(.3) rotate(-8deg); opacity: 0; } }
+@keyframes m-pop { from { transform: scale(.85) rotate(-6deg); } to { transform: scale(1.15) rotate(6deg); } }
+@keyframes m-pulse { from { transform: scale(.9); filter: brightness(1); } to { transform: scale(1.2); filter: brightness(1.3); } }
+@keyframes m-flex { from { transform: rotate(-12deg); } to { transform: rotate(14deg) scale(1.1); } }
+@keyframes m-rocket { 0% { transform: translate(-60px, 40px) rotate(0); } 50% { transform: translate(60px, -40px) rotate(8deg); } 100% { transform: translate(-60px, 40px) rotate(0); } }
+@keyframes m-spin { to { transform: rotate(360deg); } }
+@keyframes m-bounce { from { transform: translateY(10px); } to { transform: translateY(-30px); } }
+@keyframes m-clap { from { transform: scale(.9) rotate(-8deg); } to { transform: scale(1.1) rotate(8deg); } }
+@keyframes m-fall { to { transform: translate(var(--drift), 110vh) rotate(720deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .cheer, .cheer-card, .cheer-emoji, .confetti { animation: none !important; }
+  .confetti { display: none; }
+}
+
 /* Uitleg */
 .top-links { display: flex; gap: 4px; }
 .help-link { text-decoration: none; font-weight: 600; }
