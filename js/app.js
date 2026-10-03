@@ -744,7 +744,7 @@ async function studySetupView(deck) {
         <fieldset>
           <legend>Hoe wil je overhoren?</legend>
           <label class="choice"><input type="radio" name="mode" value="flip" ${last.mode === 'flip' ? 'checked' : ''}>
-            <span><b>Omdraaien</b><br><small>Bedenk het antwoord, draai om en beoordeel jezelf.</small></span></label>
+            <span><b>Omdraaien</b><br><small>Schrijf het antwoord op, draai om en beoordeel jezelf.</small></span></label>
           <label class="choice"><input type="radio" name="mode" value="type" ${last.mode === 'type' ? 'checked' : ''}>
             <span><b>Intypen</b><br><small>Typ het antwoord; de app controleert het.</small></span></label>
         </fieldset>
@@ -1022,7 +1022,7 @@ const HELP_STEPS = [
   {
     emoji: '▶️',
     title: 'Overhoren',
-    text: 'Kies: <b>Omdraaien</b> (in je hoofd) of <b>Intypen</b>.',
+    text: 'Kies: <b>Omdraaien</b> (opschrijven) of <b>Intypen</b>.',
     demo: '<span class="demo-btn primary">▶ Overhoren</span>',
   },
   {
