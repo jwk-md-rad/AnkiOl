@@ -5,6 +5,8 @@ import { checkAnswer, normalize } from './check.js';
 import { pairsFromText } from './parse.js';
 import { loadImage, toCanvas, canvasToBase64Jpeg, isHeic, isImageFile } from './image.js';
 import { STONE_TYPES } from './claude.js';
+import { GOOGLE_CLIENT_ID } from './config.js';
+import { syncNow, NeedsLogin, hasValidToken, signOut, preloadGoogle } from './sync.js';
 
 const $app = document.getElementById('app');
 const LANGS = { en: 'Engels', nl: 'Nederlands', fr: 'Frans', de: 'Duits' };
@@ -41,6 +43,8 @@ const settings = {
     return {
       apiKey: await db.getMeta('apiKey', ''),
       model: await db.getMeta('model', CLAUDE_MODELS[0].id),
+      clientId: (await db.getMeta('googleClientId', '')) || GOOGLE_CLIENT_ID,
+      syncOn: await db.getMeta('syncOn', false),
       newPerDay: await db.getMeta('newPerDay', 20),
       speak: await db.getMeta('speak', true),
     };
@@ -69,6 +73,12 @@ async function countNewToday(deckId) {
   const rec = await db.getMeta(`new:${deckId}`, null);
   const count = rec && rec.day === today ? rec.count + 1 : 1;
   await db.setMeta(`new:${deckId}`, { day: today, count });
+}
+
+// iPhone/iPad in Safari, maar nog niet als app op het beginscherm.
+function isIosBrowser() {
+  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  return ios && !navigator.standalone && !window.matchMedia('(display-mode: standalone)').matches;
 }
 
 // ---------- Router ----------
@@ -136,6 +146,13 @@ async function homeView() {
       </form>
       <p class="legend muted"><span class="c-new">nieuw</span> <span class="c-learn">aan het leren</span> <span class="c-review">te herhalen</span></p>
     </section>
+    ${
+      isIosBrowser()
+        ? `<section class="panel ios-tip"><b>📱 Zet de app op je beginscherm</b>
+      <ol><li>Tik onderin op <b>Delen</b> (vierkantje met pijl).</li><li>Kies <b>Zet op beginscherm</b>.</li></ol>
+      <p class="muted small">Anders kan Safari je woordjes na een week niet gebruiken wissen.</p></section>`
+        : ''
+    }
     <section class="panel">
       <h2>Back-up</h2>
       <p class="muted">Je woordjes staan alleen op deze Chromebook. Maak af en toe een back-up (bijv. naar Google Drive).</p>
@@ -1107,8 +1124,25 @@ async function settingsView() {
         </label>
         <p class="muted small">Optioneel. Zonder sleutel gebruikt de app gratis tekstherkenning. Met een sleutel leest Claude de foto en maakt nettere kaartjes
         (kost een paar cent per foto). Een sleutel maak je op <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>.
-        De sleutel wordt alleen op deze Chromebook bewaard en gaat rechtstreeks naar Anthropic.</p>
+        De sleutel wordt alleen op dit apparaat bewaard (ook bij synchroniseren) en gaat rechtstreeks naar Anthropic.</p>
         <button class="primary">Opslaan</button>
+      </form>
+    </section>
+    <section class="panel">
+      <h3>☁️ Synchroniseren tussen apparaten</h3>
+      <p class="muted">Zelfde woordjes en voortgang op de Chromebook en de iPhone. Log op elk apparaat in met <b>hetzelfde Google-account</b>.
+      De gegevens staan in een verborgen app-map in Google Drive; in je gewone Drive zie je niets.</p>
+      <form id="syncForm" class="grid">
+        <label>Google Client ID
+          <input name="clientId" autocomplete="off" placeholder="…apps.googleusercontent.com" value="${esc(s.clientId)}">
+        </label>
+        <p class="muted small">Eenmalig aan te maken in Google Cloud, zie de
+        <a href="https://github.com/jwk-md-rad/AnkiOl#synchroniseren-tussen-apparaten" target="_blank" rel="noopener">handleiding</a>.</p>
+        <div class="row">
+          <button class="primary">${s.syncOn ? 'Nu synchroniseren' : 'Inloggen met Google en synchroniseren'}</button>
+          ${s.syncOn ? '<button type="button" id="syncOff">Uitloggen</button>' : ''}
+        </div>
+        <p id="syncStatus" class="muted small">${await syncStatusText()}</p>
       </form>
     </section>
     <section class="panel">
@@ -1124,7 +1158,86 @@ async function settingsView() {
     await db.setMeta('model', f.model.value);
     toast('Instellingen opgeslagen', 'ok');
   };
+  if (s.clientId) preloadGoogle();
+  document.getElementById('syncForm').onsubmit = async (e) => {
+    e.preventDefault();
+    await db.setMeta('googleClientId', e.target.clientId.value.trim());
+    await runSync({ interactive: true });
+    settingsView();
+  };
+  const off = document.getElementById('syncOff');
+  if (off) {
+    off.onclick = async () => {
+      await signOut();
+      await db.setMeta('syncOn', false);
+      updateSyncButton();
+      settingsView();
+    };
+  }
 }
+
+// ---------- Synchroniseren ----------
+
+async function syncStatusText() {
+  const last = await db.getMeta('lastSync', 0);
+  if (!(await db.getMeta('syncOn', false))) return 'Nog niet ingesteld.';
+  return last ? `Laatst gesynchroniseerd: ${new Date(last).toLocaleString('nl-NL', { dateStyle: 'medium', timeStyle: 'short' })}` : 'Nog niet gesynchroniseerd.';
+}
+
+let syncState = 'idle'; // idle | busy | ok | login | error
+
+async function updateSyncButton() {
+  const btn = document.getElementById('syncBtn');
+  if (!btn) return;
+  const on = await db.getMeta('syncOn', false);
+  btn.hidden = !on;
+  const state = syncState === 'idle' && on && !hasValidToken() ? 'login' : syncState;
+  btn.textContent = { busy: '⏳', ok: '☁️', login: '☁️❗', error: '☁️⚠️', idle: '☁️' }[state];
+  btn.title = {
+    busy: 'Bezig met synchroniseren…',
+    ok: 'Gesynchroniseerd. Tik om opnieuw te synchroniseren.',
+    login: 'Tik om in te loggen en te synchroniseren',
+    error: 'Synchroniseren mislukt. Tik om opnieuw te proberen.',
+    idle: 'Synchroniseren',
+  }[state];
+}
+
+// Synchroniseren. interactive = gestart door een tik (mag een Google-venster openen).
+async function runSync({ interactive = false } = {}) {
+  const { clientId } = await settings.get();
+  if (!clientId) {
+    if (interactive) toast('Vul eerst de Google Client ID in bij Instellingen.', 'bad');
+    return;
+  }
+  if (!navigator.onLine) {
+    if (interactive) toast('Je bent offline. Synchroniseren kan alleen met internet.', 'bad');
+    return;
+  }
+  syncState = 'busy';
+  updateSyncButton();
+  try {
+    const res = await syncNow({ clientId, interactive });
+    await db.setMeta('syncOn', true);
+    syncState = 'ok';
+    if (interactive) toast(`Gesynchroniseerd: ${res.decks} ${res.decks === 1 ? 'hoofdstuk' : 'hoofdstukken'}, ${res.cards} ${res.cards === 1 ? 'kaartje' : 'kaartjes'}`, 'ok');
+    // Lijsten opnieuw tonen met de nieuwe gegevens (niet midden in het overhoren).
+    if (!/\/(study|photo|stone|add)$|settings/.test(location.hash)) route();
+  } catch (err) {
+    syncState = err instanceof NeedsLogin ? 'login' : 'error';
+    if (interactive) toast(err.message, 'bad');
+    else console.warn('Synchroniseren mislukt:', err.message);
+  }
+  updateSyncButton();
+}
+
+// Na wijzigingen even wachten en dan op de achtergrond synchroniseren.
+let syncTimer = null;
+db.setOnChange(() => {
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(async () => {
+    if (await db.getMeta('syncOn', false)) runSync();
+  }, 5000);
+});
 
 // ---------- Start ----------
 
@@ -1132,4 +1245,16 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+document.getElementById('syncBtn').onclick = () => runSync({ interactive: true });
 route();
+(async () => {
+  if (!(await db.getMeta('syncOn', false))) return;
+  updateSyncButton();
+  // Google-inloggen alvast laden, zodat een tik op ☁️ direct het venster opent.
+  preloadGoogle();
+  runSync();
+})();
+// Terug naar de app (bv. van het andere apparaat geoefend): opnieuw synchroniseren.
+document.addEventListener('visibilitychange', async () => {
+  if (document.visibilityState === 'visible' && (await db.getMeta('syncOn', false))) runSync();
+});
