@@ -1,5 +1,5 @@
 // Service worker: houdt de app offline beschikbaar.
-const CACHE = 'woordjes-v11';
+const CACHE = 'woordjes-v12';
 const SHELL = [
   './',
   'index.html',
@@ -17,6 +17,9 @@ const SHELL = [
   'js/image.js',
   'js/ocr.js',
   'js/claude.js',
+  'js/config.js',
+  'js/merge.js',
+  'js/sync.js',
 ];
 
 self.addEventListener('install', (e) => {
@@ -36,7 +39,7 @@ self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
-  if (url.hostname === 'api.anthropic.com') return;
+  if (url.hostname === 'api.anthropic.com' || url.hostname.endsWith('googleapis.com') || url.hostname === 'accounts.google.com') return;
 
   if (url.origin === location.origin) {
     // Eigen bestanden: eerst netwerk (voor updates), anders uit de cache.

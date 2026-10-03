@@ -211,3 +211,52 @@ test('Stone: nieuwe varianten toevoegen zonder dubbele, met maximum', () => {
   assert.equal(card.lastVariant, -1);
   assert.equal(nextVariant(card), 0);
 });
+
+test('synchroniseren: samenvoegen van twee apparaten', async () => {
+  const { mergeData } = await import('../js/merge.js');
+  const T = 1_000_000;
+  const st = (lastReview, interval) => ({ ...newState(), state: 'review', lastReview, interval });
+  const deck = { id: 'd1', name: 'H1', updated: T };
+  // Chromebook: kaart a bewerkt (later), kaart b fwd later geoefend, kaart c verwijderd.
+  const chromebook = {
+    decks: [deck],
+    cards: [
+      { id: 'a', deckId: 'd1', front: 'house', back: 'huis!', updated: T + 50, fwd: st(T, 1), rev: newState() },
+      { id: 'b', deckId: 'd1', front: 'cat', back: 'kat', updated: T + 10, fwd: st(T + 10, 3), rev: st(T, 1) },
+    ],
+    deleted: { c: T + 20 },
+  };
+  // iPhone: kaart a ouder, kaart b rev later geoefend, kaart c nog aanwezig, nieuwe kaart d,
+  // en een Stone-kaart met extra varianten.
+  const iphone = {
+    decks: [deck],
+    cards: [
+      { id: 'a', deckId: 'd1', front: 'house', back: 'huis', updated: T + 5, fwd: st(T + 40, 6), rev: newState() },
+      { id: 'b', deckId: 'd1', front: 'cat', back: 'kat', updated: T + 30, fwd: st(T, 1), rev: st(T + 30, 4) },
+      { id: 'c', deckId: 'd1', front: 'dog', back: 'hond', updated: T + 1, fwd: newState(), rev: newState() },
+      { id: 'd', deckId: 'd1', front: 'tree', back: 'boom', updated: T + 2, fwd: newState(), rev: newState() },
+    ],
+    deleted: {},
+  };
+  const m = mergeData(chromebook, iphone, T + 100);
+  const card = (id) => m.cards.find((c) => c.id === id);
+  assert.deepEqual(m.cards.map((c) => c.id).sort(), ['a', 'b', 'd']);
+  assert.equal(card('a').back, 'huis!', 'laatste bewerking wint');
+  assert.equal(card('a').fwd.interval, 6, 'laatste keer overhoren wint per richting');
+  assert.equal(card('b').fwd.interval, 3);
+  assert.equal(card('b').rev.interval, 4);
+  assert.equal(m.deleted.c, T + 20);
+  // Andersom samenvoegen geeft hetzelfde.
+  const m2 = mergeData(iphone, chromebook, T + 100);
+  assert.deepEqual(m2.cards.map((c) => [c.id, c.back, c.fwd.interval, c.rev.interval]).sort(), m.cards.map((c) => [c.id, c.back, c.fwd.interval, c.rev.interval]).sort());
+  // Hoofdstuk verwijderd → kaartjes ook weg; opnieuw aangemaakt na verwijderen → blijft.
+  const gone = mergeData({ ...chromebook, deleted: { d1: T + 60 } }, iphone, T + 100);
+  assert.equal(gone.decks.length, 0);
+  assert.equal(gone.cards.length, 0);
+  // Stone: varianten van beide kanten blijven.
+  const v = (p) => ({ prompt: p, answer: p, alternatives: [] });
+  const s1 = { id: 's', deckId: 'd1', kind: 'stone', variants: [v('a'), v('b')], updated: T + 5, fwd: newState(), rev: newState() };
+  const s2 = { ...s1, variants: [v('a'), v('c')], updated: T + 6 };
+  const ms = mergeData({ decks: [deck], cards: [s1] }, { decks: [deck], cards: [s2] }, T + 100);
+  assert.deepEqual(ms.cards[0].variants.map((x) => x.prompt), ['a', 'c', 'b']);
+});

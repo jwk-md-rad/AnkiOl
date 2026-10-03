@@ -2,7 +2,11 @@
 <html lang="nl">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Woordjes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <title>Woordjes</title>
   <meta name="description" content="Woordjes en zinnen leren met spaced repetition. Maak kaartjes van foto's uit je leerboek.">
   <meta name="theme-color" content="#2f6fde">
@@ -15,6 +19,7 @@
   <header class="top">
     <a href="#/" class="brand"><img src="icons/icon.svg" alt="" width="28" height="28"> Woordjes</a>
     <nav class="top-links">
+      <button id="syncBtn" class="icon" title="Synchroniseren" hidden>☁️</button>
       <a href="#/uitleg" class="button icon" title="Hoe werkt het?">❓</a>
       <a href="#/settings" class="button icon" title="Instellingen">⚙</a>
     </nav>
