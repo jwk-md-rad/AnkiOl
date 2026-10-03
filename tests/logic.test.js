@@ -260,3 +260,18 @@ test('synchroniseren: samenvoegen van twee apparaten', async () => {
   const ms = mergeData({ decks: [deck], cards: [s1] }, { decks: [deck], cards: [s2] }, T + 100);
   assert.deepEqual(ms.cards[0].variants.map((x) => x.prompt), ['a', 'c', 'b']);
 });
+
+test('aanmoedigingen: willekeurig om de 6–14 kaartjes, niet twee keer dezelfde', async () => {
+  const { nextGap, pick, SHOWS, MESSAGES } = await import('../js/cheer.js');
+  assert.equal(nextGap(() => 0), 6);
+  assert.equal(nextGap(() => 0.999), 14);
+  let last = {};
+  for (let k = 0; k < 50; k++) {
+    const next = pick(last);
+    assert.ok(next.show >= 0 && next.show < SHOWS.length);
+    assert.ok(next.message >= 0 && next.message < MESSAGES.length);
+    assert.notEqual(next.show, last.show);
+    assert.notEqual(next.message, last.message);
+    last = next;
+  }
+});

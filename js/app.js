@@ -6,6 +6,7 @@ import { pairsFromText } from './parse.js';
 import { loadImage, toCanvas, canvasToBase64Jpeg, isHeic, isImageFile } from './image.js';
 import { STONE_TYPES } from './claude.js';
 import { GOOGLE_CLIENT_ID } from './config.js';
+import { nextGap, pick, showCheer } from './cheer.js';
 import { syncNow, NeedsLogin, hasValidToken, signOut, preloadGoogle } from './sync.js';
 
 const $app = document.getElementById('app');
@@ -47,6 +48,7 @@ const settings = {
       syncOn: await db.getMeta('syncOn', false),
       newPerDay: await db.getMeta('newPerDay', 20),
       speak: await db.getMeta('speak', true),
+      cheer: await db.getMeta('cheer', true),
     };
   },
 };
@@ -809,7 +811,10 @@ function cramSession(cards, dirs) {
 }
 
 async function studyView(deck, cards, { mode, dir, cram, newLeft }) {
-  const { speak: speakOn } = await settings.get();
+  const { speak: speakOn, cheer: cheerOn } = await settings.get();
+  let sinceCheer = 0;
+  let cheerGap = nextGap();
+  let lastCheer = {};
   const dirs = DIRS[dir];
   const session = cram ? cramSession(cards, dirs) : new Session(cards, dirs, { newLimit: newLeft });
   const langOf = (d, side) => (d === 'fwd') === (side === 'q') ? deck.frontLang : deck.backLang;
@@ -953,6 +958,13 @@ async function studyView(deck, cards, { mode, dir, cram, newLeft }) {
     if (!cram) {
       await db.putCards([item.card]);
       if (wasNew) await countNewToday(deck.id);
+    }
+    // Na een willekeurig aantal kaartjes even een aanmoediging.
+    if (cheerOn && ++sinceCheer >= cheerGap) {
+      lastCheer = pick(lastCheer);
+      await showCheer(lastCheer, session.stats.answered);
+      sinceCheer = 0;
+      cheerGap = nextGap();
     }
     next();
   }
@@ -1114,6 +1126,7 @@ async function settingsView() {
           <input name="newPerDay" type="number" min="1" max="500" value="${s.newPerDay}">
         </label>
         <label class="inline"><input type="checkbox" name="speak" ${s.speak ? 'checked' : ''}> Woordjes voorlezen</label>
+        <label class="inline"><input type="checkbox" name="cheer" ${s.cheer ? 'checked' : ''}> Aanmoedigingen tonen (gifjes tussendoor)</label>
         <label>Anthropic API-sleutel (voor Claude AI foto-herkenning)
           <input name="apiKey" type="password" autocomplete="off" placeholder="sk-ant-…" value="${esc(s.apiKey)}">
         </label>
@@ -1154,6 +1167,7 @@ async function settingsView() {
     const f = e.target;
     await db.setMeta('newPerDay', Math.max(1, Number(f.newPerDay.value) || 20));
     await db.setMeta('speak', f.speak.checked);
+    await db.setMeta('cheer', f.cheer.checked);
     await db.setMeta('apiKey', f.apiKey.value.trim());
     await db.setMeta('model', f.model.value);
     toast('Instellingen opgeslagen', 'ok');

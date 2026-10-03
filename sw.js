@@ -1,5 +1,5 @@
 // Service worker: houdt de app offline beschikbaar.
-const CACHE = 'woordjes-v12';
+const CACHE = 'woordjes-v13';
 const SHELL = [
   './',
   'index.html',
@@ -20,6 +20,7 @@ const SHELL = [
   'js/config.js',
   'js/merge.js',
   'js/sync.js',
+  'js/cheer.js',
 ];
 
 self.addEventListener('install', (e) => {

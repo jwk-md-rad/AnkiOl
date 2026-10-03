@@ -12,6 +12,7 @@ Een AnkiWeb-achtige app om woordjes en zinnen te overhoren (Engels ↔ Nederland
 - Richting kiezen: Engels → Nederlands, Nederlands → Engels of beide (elke richting heeft een eigen planning).
 - *Alles oefenen* (toetsmodus): alle woordjes van een hoofdstuk langs, zonder de planning te verstoren.
 - Voorlezen van Engelse woorden (spraak van Chrome).
+- **Aanmoedigingen**: om de 6 tot 14 kaartjes (willekeurig) een kort geanimeerd "gifje" met *Lekker bezig!*, *Ga zo door!* enz. Zelfgemaakte animaties, dus ook offline; uit te zetten bij Instellingen.
 - Werkt **offline** en kan geïnstalleerd worden als app. Gegevens staan lokaal op de Chromebook; met *Back-up downloaden* maak je een kopie (bv. in Google Drive).
 
 ## Sneltoetsen bij het overhoren
