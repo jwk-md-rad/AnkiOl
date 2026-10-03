@@ -1,5 +1,5 @@
 // Service worker: houdt de app offline beschikbaar.
-const CACHE = 'woordjes-v9';
+const CACHE = 'woordjes-v11';
 const SHELL = [
   './',
   'index.html',

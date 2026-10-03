@@ -23,6 +23,33 @@ export function nextVariant(card) {
   return ((card.lastVariant ?? -1) + 1) % n;
 }
 
+// Is dit de laatste nog niet herhaalde variant? Dan zijn er nieuwe nodig.
+export function needsMoreVariants(card, shown) {
+  return card.kind === 'stone' && shown >= (card.variants || []).length - 1;
+}
+
+const sameText = (s) => String(s).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+
+// Nieuwe varianten toevoegen: geen dubbele, en maximaal `max` bewaren
+// (de oudste vallen weg). Geeft het aantal toegevoegde varianten terug.
+export function addVariants(card, fresh, max = 40) {
+  const known = new Set(card.variants.map((v) => sameText(v.prompt)));
+  let added = 0;
+  for (const v of fresh) {
+    const key = sameText(v.prompt);
+    if (!key || known.has(key)) continue;
+    known.add(key);
+    card.variants.push(v);
+    added++;
+  }
+  const extra = card.variants.length - max;
+  if (extra > 0) {
+    card.variants.splice(0, extra);
+    if (card.lastVariant !== undefined) card.lastVariant = Math.max(-1, card.lastVariant - extra);
+  }
+  return added;
+}
+
 export function countDue(cards, dirs, now = Date.now()) {
   let fresh = 0;
   let learn = 0;

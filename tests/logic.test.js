@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { newState, schedule, AGAIN, HARD, GOOD, EASY, MINUTE, previewLabels } from '../js/srs.js';
 import { checkAnswer, normalize } from '../js/check.js';
 import { pairsFromText, pairsFromLines, plausible } from '../js/parse.js';
-import { Session, countDue, nextVariant, dirsFor } from '../js/session.js';
+import { Session, countDue, nextVariant, dirsFor, addVariants, needsMoreVariants } from '../js/session.js';
 
 const NOW = new Date('2026-10-02T15:00:00').getTime();
 
@@ -194,4 +194,20 @@ test('Stone-oefeningen: één richting en steeds een andere variant', () => {
     stone.lastVariant = v;
   }
   assert.deepEqual(seen, [0, 1, 2, 0]);
+});
+
+test('Stone: nieuwe varianten toevoegen zonder dubbele, met maximum', () => {
+  const v = (prompt) => ({ prompt, answer: prompt.toUpperCase(), alternatives: [] });
+  const card = { kind: 'stone', variants: [v('a b'), v('c d')], lastVariant: 1 };
+  assert.equal(needsMoreVariants(card, 0), false);
+  assert.equal(needsMoreVariants(card, 1), true);
+  assert.equal(addVariants(card, [v('A, b!'), v('e f'), v('g h'), v('e f')]), 2);
+  assert.deepEqual(card.variants.map((x) => x.prompt), ['a b', 'c d', 'e f', 'g h']);
+  // Na de laatste oude variant komen de nieuwe aan de beurt.
+  assert.equal(nextVariant(card), 2);
+  // Maximum: de oudste vallen weg en de teller schuift mee.
+  addVariants(card, [v('i j'), v('k l')], 4);
+  assert.deepEqual(card.variants.map((x) => x.prompt), ['e f', 'g h', 'i j', 'k l']);
+  assert.equal(card.lastVariant, -1);
+  assert.equal(nextVariant(card), 0);
 });
