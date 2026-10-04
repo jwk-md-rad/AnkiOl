@@ -8,7 +8,7 @@ Een AnkiWeb-achtige app om woordjes en zinnen te overhoren (Engels ↔ Nederland
 - Woordjes per **hoofdstuk** (bijvoorbeeld *Engels H4*), zoals in het leerboek.
 - **Stones** (zinsbouw-schema's uit Stepping Stones): foto uploaden → Claude verzint oefenzinnen (Nederlands → Engels vertalen, vraag beantwoorden, gatenzin) met steeds andere namen, datums en woorden. Antwoord op papier schrijven, omdraaien, zelf nakijken. Elke herhaling een andere variant; zijn alle zinnen van een oefening geweest, dan maakt Claude op de achtergrond nieuwe (± 0,5–1 cent per keer, alleen online). Met *🔄 Nieuwe Stone-zinnen* in een hoofdstuk maak je zelf een verse ronde. Vereist een Claude API-sleutel (schatting: ± 10–25 cent per Stone met Opus, ± 5–12 met Sonnet).
 - **Spaced repetition** zoals Anki (SM-2): nieuwe woordjes komen terug na 1 en 10 minuten, daarna na 1 dag, en steeds langere tijd zolang je ze goed weet. Fout = vaker oefenen.
-- **Per sessie kiezen**: *omdraaien en zelf beoordelen* (Opnieuw / Moeilijk / Goed / Makkelijk) of *antwoord intypen* (tolerant voor hoofdletters, accenten, lidwoorden en kleine typfouten).
+- **Per sessie kiezen**: *omdraaien en zelf beoordelen* (Opnieuw / Moeilijk / Goed / Makkelijk) of *antwoord intypen* (tolerant voor hoofdletters, accenten, lidwoorden en kleine typfouten; Engelse samentrekkingen tellen als hetzelfde: *it's* = *it is*, *don't* = *do not*, *can't* = *cannot*, …).
 - Richting kiezen: Engels → Nederlands, Nederlands → Engels of beide (elke richting heeft een eigen planning).
 - *Alles oefenen* (toetsmodus): alle woordjes van een hoofdstuk langs, zonder de planning te verstoren.
 - Voorlezen van Engelse woorden (spraak van Chrome).

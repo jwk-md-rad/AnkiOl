@@ -60,7 +60,7 @@ test('antwoordcontrole is tolerant', () => {
   assert.equal(checkAnswer('beautifull', 'beautiful'), 'almost');
   assert.equal(checkAnswer('hond', 'kat'), 'wrong');
   assert.equal(checkAnswer('', 'kat'), 'wrong');
-  assert.equal(checkAnswer('I am fine', "I'm fine (thanks)"), 'almost');
+  assert.equal(checkAnswer('I am fine', "I'm fine (thanks)"), 'correct'); // samentrekking telt als hetzelfde
   assert.equal(checkAnswer('I am happy', "I'm fine"), 'wrong');
   assert.equal(checkAnswer("i'm fine", "I'm fine (thanks)"), 'correct');
   assert.equal(normalize('  The  Car! '), 'car');
@@ -288,4 +288,38 @@ test('één letter fout geeft een tweede kans', async () => {
   assert.equal(oneLetterOff('beautfl', 'beautiful'), false); // twee letters fout
   assert.equal(oneLetterOff('ja', 'je'), false); // te kort
   assert.equal(oneLetterOff('', 'huis'), false);
+});
+
+test('Engelse samentrekkingen tellen als hetzelfde antwoord', () => {
+  const same = [
+    ["It is my birthday", "It's my birthday"],
+    ["I am Dutch", "I'm Dutch"],
+    ["I do not like it", "I don't like it"],
+    ["She cannot swim", "She can't swim"],
+    ["She can not swim", "She can't swim"],
+    ["They will not come", "They won't come"],
+    ["it isn't", "it's not"],
+    ["you aren't", "you're not"],
+    ["We are from Utrecht", "We're from Utrecht"],
+    ["I have got a sister", "I've got a sister"],
+    ["He has got a dog", "He's got a dog"],
+    ["I would like a pizza", "I'd like a pizza"],
+    ["What is your name?", "What's your name?"],
+    ["Let us go", "Let's go"],
+    ["I will help you", "I'll help you"],
+    ["It's my bike", "It is my bike"],
+  ];
+  for (const [given, expected] of same) assert.equal(checkAnswer(given, expected), 'correct', `${given} = ${expected}`);
+  // Bezit-'s blijft bezit, en "its" is iets anders dan "it's".
+  assert.equal(normalize("Tom's bike"), "tom's bike");
+  assert.notEqual(checkAnswer('its', "it's"), 'correct');
+});
+
+test('apostrof vergeten = bijna goed met tweede kans', async () => {
+  const { oneLetterOff } = await import('../js/check.js');
+  assert.equal(checkAnswer('I dont like it', "I don't like it"), 'almost');
+  assert.equal(checkAnswer('Im Dutch', "I'm Dutch"), 'almost');
+  assert.equal(oneLetterOff('cant', "can't"), true);
+  assert.equal(oneLetterOff("can't", "can't"), false);
+  assert.equal(oneLetterOff('cannot', "can't"), false); // gewoon goed
 });
