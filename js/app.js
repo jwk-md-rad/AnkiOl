@@ -49,6 +49,7 @@ const settings = {
       newPerDay: await db.getMeta('newPerDay', 20),
       speak: await db.getMeta('speak', true),
       cheer: await db.getMeta('cheer', true),
+      secondChance: await db.getMeta('secondChance', true),
     };
   },
 };
@@ -811,7 +812,7 @@ function cramSession(cards, dirs) {
 }
 
 async function studyView(deck, cards, { mode, dir, cram, newLeft }) {
-  const { speak: speakOn, cheer: cheerOn } = await settings.get();
+  const { speak: speakOn, cheer: cheerOn, secondChance: secondChanceOn } = await settings.get();
   let sinceCheer = 0;
   let cheerGap = nextGap();
   let lastCheer = {};
@@ -885,7 +886,7 @@ async function studyView(deck, cards, { mode, dir, cram, newLeft }) {
         // Per ongeluk Enter zonder antwoord: niet als fout rekenen, eerst melden.
         if (!input.value.trim()) return warn('Je hebt nog niets ingetypt. ✍️');
         // Eén letter fout: eerst een tweede kans, zonder het antwoord te laten zien.
-        if (!secondChance && oneLetterOff(input.value, answerText())) {
+        if (secondChanceOn && !secondChance && oneLetterOff(input.value, answerText())) {
           secondChance = true;
           return warn('🤏 Bijna goed! Lees je antwoord nog even goed na.');
         }
@@ -1152,6 +1153,7 @@ async function settingsView() {
         </label>
         <label class="inline"><input type="checkbox" name="speak" ${s.speak ? 'checked' : ''}> Woordjes voorlezen</label>
         <label class="inline"><input type="checkbox" name="cheer" ${s.cheer ? 'checked' : ''}> Aanmoedigingen tonen (gifjes tussendoor)</label>
+        <label class="inline"><input type="checkbox" name="secondChance" ${s.secondChance ? 'checked' : ''}> Bij intypen: tweede kans bij één letter fout ("Bijna goed! Lees nog even na")</label>
         <label>Anthropic API-sleutel (voor Claude AI foto-herkenning)
           <input name="apiKey" type="password" autocomplete="off" placeholder="sk-ant-…" value="${esc(s.apiKey)}">
         </label>
@@ -1193,6 +1195,7 @@ async function settingsView() {
     await db.setMeta('newPerDay', Math.max(1, Number(f.newPerDay.value) || 20));
     await db.setMeta('speak', f.speak.checked);
     await db.setMeta('cheer', f.cheer.checked);
+    await db.setMeta('secondChance', f.secondChance.checked);
     await db.setMeta('apiKey', f.apiKey.value.trim());
     await db.setMeta('model', f.model.value);
     toast('Instellingen opgeslagen', 'ok');
