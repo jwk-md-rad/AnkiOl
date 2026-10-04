@@ -1,7 +1,7 @@
 import * as db from './db.js';
 import { previewLabels, AGAIN, HARD, GOOD, EASY, formatMs } from './srs.js';
 import { Session, countDue, nextVariant, needsMoreVariants, addVariants } from './session.js';
-import { checkAnswer, normalize } from './check.js';
+import { checkAnswer, normalize, oneLetterOff } from './check.js';
 import { pairsFromText } from './parse.js';
 import { loadImage, toCanvas, canvasToBase64Jpeg, isHeic, isImageFile } from './image.js';
 import { STONE_TYPES } from './claude.js';
@@ -863,7 +863,7 @@ async function studyView(deck, cards, { mode, dir, cram, newLeft }) {
       ${
         mode === 'type'
           ? `<form id="typeForm" class="type"><input id="typed" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Typ je antwoord (${esc(LANGS[aLang])})"><button class="primary">Controleer</button></form>
-             <p id="typeHint" class="type-hint" hidden>Je hebt nog niets ingetypt. ✍️ <button type="button" id="dontKnow" class="link">Weet ik niet</button></p>`
+             <p id="typeHint" class="type-hint" hidden><span id="hintText"></span> <button type="button" id="dontKnow" class="link">Weet ik niet</button></p>`
           : `<button id="flip" class="primary big">Toon antwoord <kbd>spatie</kbd></button>`
       }
       <div id="answer"></div>`;
@@ -871,16 +871,23 @@ async function studyView(deck, cards, { mode, dir, cram, newLeft }) {
       const input = document.getElementById('typed');
       input.focus();
       const hint = document.getElementById('typeHint');
+      let secondChance = false;
+      const warn = (text) => {
+        document.getElementById('hintText').textContent = text;
+        hint.hidden = false;
+        input.classList.remove('shake');
+        void input.offsetWidth;
+        input.classList.add('shake');
+        input.focus();
+      };
       document.getElementById('typeForm').onsubmit = (e) => {
         e.preventDefault();
         // Per ongeluk Enter zonder antwoord: niet als fout rekenen, eerst melden.
-        if (!input.value.trim()) {
-          hint.hidden = false;
-          input.classList.remove('shake');
-          void input.offsetWidth;
-          input.classList.add('shake');
-          input.focus();
-          return;
+        if (!input.value.trim()) return warn('Je hebt nog niets ingetypt. ✍️');
+        // Eén letter fout: eerst een tweede kans, zonder het antwoord te laten zien.
+        if (!secondChance && oneLetterOff(input.value, answerText())) {
+          secondChance = true;
+          return warn('🤏 Bijna goed! Lees je antwoord nog even goed na.');
         }
         hint.remove();
         reveal(input.value);

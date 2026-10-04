@@ -65,3 +65,11 @@ export function checkAnswer(given, expected) {
   }
   return 'wrong';
 }
+
+// Precies één letter verschil met een goed antwoord (bv. "beautifl" i.p.v.
+// "beautiful")? Dan krijgt de leerling eerst een tweede kans.
+export function oneLetterOff(given, expected) {
+  const g = normalize(given);
+  if (!g) return false;
+  return alternatives(expected).some((a) => a.length >= 3 && levenshtein(g, a) === 1);
+}
