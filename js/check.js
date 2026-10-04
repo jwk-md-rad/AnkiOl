@@ -28,21 +28,26 @@ export function alternatives(expected) {
   return [...new Set([whole, ...parts])].filter(Boolean);
 }
 
-export function levenshtein(a, b) {
+// Aantal typfouten tussen twee woorden: een letter vergeten, te veel, verkeerd,
+// of twee letters omgewisseld ("hius" ↔ "huis") telt elk als één fout.
+export function typoDistance(a, b) {
   if (a === b) return 0;
   const m = a.length;
   const n = b.length;
   if (!m) return n;
   if (!n) return m;
-  let prev = Array.from({ length: n + 1 }, (_, j) => j);
+  const d = Array.from({ length: m + 1 }, (_, i) => [i, ...new Array(n).fill(0)]);
+  for (let j = 0; j <= n; j++) d[0][j] = j;
   for (let i = 1; i <= m; i++) {
-    const cur = [i];
     for (let j = 1; j <= n; j++) {
-      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost);
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
+        d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+      }
     }
-    prev = cur;
   }
-  return prev[n];
+  return d[m][n];
 }
 
 function allowedTypos(len) {
@@ -61,15 +66,15 @@ export function checkAnswer(given, expected) {
   const givenParts = String(given).split(/[,;/]/).map(normalize).filter(Boolean);
   if (givenParts.length > 1 && givenParts.every((p) => alts.includes(p))) return 'correct';
   for (const a of alts) {
-    if (levenshtein(g, a) <= allowedTypos(a.length)) return 'almost';
+    if (typoDistance(g, a) <= allowedTypos(a.length)) return 'almost';
   }
   return 'wrong';
 }
 
-// Precies één letter verschil met een goed antwoord (bv. "beautifl" i.p.v.
-// "beautiful")? Dan krijgt de leerling eerst een tweede kans.
+// Precies één typfout verschil met een goed antwoord (bv. "beautifl" i.p.v.
+// "beautiful", of "hius" i.p.v. "huis")? Dan krijgt de leerling eerst een tweede kans.
 export function oneLetterOff(given, expected) {
   const g = normalize(given);
   if (!g) return false;
-  return alternatives(expected).some((a) => a.length >= 3 && levenshtein(g, a) === 1);
+  return alternatives(expected).some((a) => a.length >= 3 && typoDistance(g, a) === 1);
 }

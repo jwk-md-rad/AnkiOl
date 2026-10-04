@@ -279,7 +279,9 @@ test('aanmoedigingen: willekeurig om de 6–14 kaartjes, niet twee keer dezelfde
 test('één letter fout geeft een tweede kans', async () => {
   const { oneLetterOff } = await import('../js/check.js');
   assert.equal(oneLetterOff('beautifl', 'beautiful'), true); // letter vergeten
-  assert.equal(oneLetterOff('hius', 'huis'), false); // twee letters verwisseld = 2 verschillen
+  assert.equal(oneLetterOff('hius', 'huis'), true); // twee letters omgewisseld telt als één fout
+  assert.equal(oneLetterOff('becuase', 'because'), true);
+  assert.equal(oneLetterOff('hiuss', 'huis'), false); // omgewisseld én extra letter = twee fouten
   assert.equal(oneLetterOff('huiss', 'het huis'), true); // lidwoord telt niet mee
   assert.equal(oneLetterOff('woninh', 'huis, woning'), true); // ook bij een alternatief
   assert.equal(oneLetterOff('huis', 'huis'), false); // gewoon goed
