@@ -862,17 +862,35 @@ async function studyView(deck, cards, { mode, dir, cram, newLeft }) {
       <div class="q">${esc(question())} ${speakBtn(question(), qLang)}</div>
       ${
         mode === 'type'
-          ? `<form id="typeForm" class="type"><input id="typed" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Typ je antwoord (${esc(LANGS[aLang])})"><button class="primary">Controleer</button></form>`
+          ? `<form id="typeForm" class="type"><input id="typed" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Typ je antwoord (${esc(LANGS[aLang])})"><button class="primary">Controleer</button></form>
+             <p id="typeHint" class="type-hint" hidden>Je hebt nog niets ingetypt. ✍️ <button type="button" id="dontKnow" class="link">Weet ik niet</button></p>`
           : `<button id="flip" class="primary big">Toon antwoord <kbd>spatie</kbd></button>`
       }
       <div id="answer"></div>`;
     if (mode === 'type') {
       const input = document.getElementById('typed');
       input.focus();
+      const hint = document.getElementById('typeHint');
       document.getElementById('typeForm').onsubmit = (e) => {
         e.preventDefault();
+        // Per ongeluk Enter zonder antwoord: niet als fout rekenen, eerst melden.
+        if (!input.value.trim()) {
+          hint.hidden = false;
+          input.classList.remove('shake');
+          void input.offsetWidth;
+          input.classList.add('shake');
+          input.focus();
+          return;
+        }
+        hint.remove();
         reveal(input.value);
       };
+      // Bewust "weet ik niet": antwoord tonen (telt als fout).
+      document.getElementById('dontKnow').onclick = () => {
+        hint.remove();
+        reveal('');
+      };
+      input.oninput = () => (hint.hidden = true);
     } else {
       document.getElementById('flip').onclick = () => reveal(null);
     }
