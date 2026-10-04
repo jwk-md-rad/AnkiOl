@@ -3,6 +3,50 @@
 
 const OPTIONAL_PREFIXES = ['to ', 'the ', 'a ', 'an ', 'de ', 'het ', 'een ', "'t "];
 
+// Engelse samentrekkingen uitschrijven, zodat "it's" en "it is", "don't" en
+// "do not", "can't" en "cannot" enz. als hetzelfde antwoord tellen.
+// 's wordt alleen uitgeschreven na voornaamwoorden en vraagwoorden (niet bij
+// "Tom's" = van Tom), en is "has" vóór got/been ("he's got" = "he has got").
+const S_WORDS = 'he|she|it|that|there|here|what|where|who|how|when|why';
+const CONTRACTIONS = [
+  [/\bcannot\b/g, 'can not'],
+  [/\bcan't\b/g, 'can not'],
+  [/\bwon't\b/g, 'will not'],
+  [/\bshan't\b/g, 'shall not'],
+  [/\b(\w+)n't\b/g, '$1 not'],
+  [/\bi'm\b/g, 'i am'],
+  [/\blet's\b/g, 'let us'],
+  [/\b(\w+)'re\b/g, '$1 are'],
+  [/\b(\w+)'ve\b/g, '$1 have'],
+  [/\b(\w+)'ll\b/g, '$1 will'],
+  [/\b(\w+)'d (been|better|got)\b/g, '$1 had $2'],
+  [/\b(\w+)'d\b/g, '$1 would'],
+  [new RegExp(`\\b(${S_WORDS})'s (got|been)\\b`, 'g'), '$1 has $2'],
+  [new RegExp(`\\b(${S_WORDS})'s\\b`, 'g'), '$1 is'],
+];
+
+function expandContractions(t) {
+  for (const [re, to] of CONTRACTIONS) t = t.replace(re, to);
+  return t;
+}
+
+// Zelfde antwoord, alleen de apostrof vergeten ("dont" ↔ "don't", "Im" ↔ "I'm")?
+function withoutApostrophes(s) {
+  return String(s)
+    .toLowerCase()
+    .replace(/[’‘`']/g, '')
+    .replace(/[^\p{L}\p{N} ]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function missingApostrophe(given, expected) {
+  const g = withoutApostrophes(given);
+  return String(expected)
+    .split(/[,;/]|\s\|\s/)
+    .some((a) => /['’]/.test(a) && withoutApostrophes(a) === g);
+}
+
 export function normalize(s) {
   let t = String(s)
     .toLowerCase()
@@ -13,6 +57,7 @@ export function normalize(s) {
     .replace(/[^\p{L}\p{N}' ]+/gu, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+  t = expandContractions(t);
   for (const p of OPTIONAL_PREFIXES) {
     if (t.startsWith(p)) {
       t = t.slice(p.length);
@@ -65,6 +110,7 @@ export function checkAnswer(given, expected) {
   // Meerdere antwoorden ingetypt (bv. "huis, woning"): elk deel moet kloppen.
   const givenParts = String(given).split(/[,;/]/).map(normalize).filter(Boolean);
   if (givenParts.length > 1 && givenParts.every((p) => alts.includes(p))) return 'correct';
+  if (missingApostrophe(given, expected)) return 'almost';
   for (const a of alts) {
     if (typoDistance(g, a) <= allowedTypos(a.length)) return 'almost';
   }
@@ -76,5 +122,7 @@ export function checkAnswer(given, expected) {
 export function oneLetterOff(given, expected) {
   const g = normalize(given);
   if (!g) return false;
+  if (alternatives(expected).includes(g)) return false;
+  if (missingApostrophe(given, expected)) return true;
   return alternatives(expected).some((a) => a.length >= 3 && typoDistance(g, a) === 1);
 }
