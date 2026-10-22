@@ -8,6 +8,7 @@ import { STONE_TYPES } from './claude.js';
 import { GOOGLE_CLIENT_ID } from './config.js';
 import { nextGap, pick, showCheer } from './cheer.js';
 import { syncNow, NeedsLogin, hasValidToken, signOut, preloadGoogle } from './sync.js';
+import { syncGist, BadToken } from './gistsync.js';
 
 const $app = document.getElementById('app');
 const LANGS = { en: 'Engels', nl: 'Nederlands', fr: 'Frans', de: 'Duits' };
@@ -46,6 +47,9 @@ const settings = {
       model: await db.getMeta('model', CLAUDE_MODELS[0].id),
       clientId: (await db.getMeta('googleClientId', '')) || GOOGLE_CLIENT_ID,
       syncOn: await db.getMeta('syncOn', false),
+      // 'github' (werkt ook met een schoolaccount) of 'google'
+      syncMethod: await db.getMeta('syncMethod', 'github'),
+      githubToken: await db.getMeta('githubToken', ''),
       newPerDay: await db.getMeta('newPerDay', 20),
       speak: await db.getMeta('speak', true),
       cheer: await db.getMeta('cheer', true),
@@ -1161,6 +1165,8 @@ async function helpView(i) {
 
 async function settingsView() {
   const s = await settings.get();
+  const gistOn = s.syncOn && s.syncMethod === 'github' && Boolean(s.githubToken);
+  const googleOn = s.syncOn && s.syncMethod === 'google';
   const persisted = navigator.storage && navigator.storage.persisted ? await navigator.storage.persisted() : false;
   render(`
     <nav class="crumbs"><a href="#/">← Hoofdstukken</a></nav>
@@ -1189,20 +1195,34 @@ async function settingsView() {
     </section>
     <section class="panel">
       <h3>☁️ Synchroniseren tussen apparaten</h3>
-      <p class="muted">Zelfde woordjes en voortgang op de Chromebook en de iPhone. Log op elk apparaat in met <b>hetzelfde Google-account</b>.
-      De gegevens staan in een verborgen app-map in Google Drive; in je gewone Drive zie je niets.</p>
-      <form id="syncForm" class="grid">
-        <label>Google Client ID
-          <input name="clientId" autocomplete="off" placeholder="…apps.googleusercontent.com" value="${esc(s.clientId)}">
+      <p class="muted">Zelfde woordjes en voortgang op de Chromebook en de iPhone. Vul op elk apparaat <b>dezelfde GitHub-sleutel</b> in.
+      De gegevens staan in een geheime notitie (gist) op GitHub; alleen wie de sleutel heeft kan erbij.</p>
+      <form id="gistForm" class="grid">
+        <label>GitHub-sleutel
+          <input name="githubToken" type="password" autocomplete="off" spellcheck="false" placeholder="ghp_…" value="${esc(s.githubToken)}">
         </label>
-        <p class="muted small">Eenmalig aan te maken in Google Cloud, zie de
-        <a href="https://github.com/jwk-md-rad/AnkiOl#synchroniseren-tussen-apparaten" target="_blank" rel="noopener">handleiding</a>.</p>
+        <p class="muted small">Eenmalig aan te maken op GitHub, zie de
+        <a href="https://github.com/jwk-md-rad/AnkiOl#synchroniseren-tussen-apparaten" target="_blank" rel="noopener">handleiding</a>.
+        De sleutel wordt alleen op dit apparaat bewaard (niet in de back-up).</p>
         <div class="row">
-          <button class="primary">${s.syncOn ? 'Nu synchroniseren' : 'Inloggen met Google en synchroniseren'}</button>
-          ${s.syncOn ? '<button type="button" id="syncOff">Uitloggen</button>' : ''}
+          <button class="primary">${gistOn ? 'Nu synchroniseren' : 'Synchroniseren starten'}</button>
+          ${gistOn ? '<button type="button" id="gistOff">Stoppen op dit apparaat</button>' : ''}
         </div>
-        <p id="syncStatus" class="muted small">${await syncStatusText()}</p>
+        ${s.syncMethod === 'github' || !s.syncOn ? `<p id="syncStatus" class="muted small">${await syncStatusText()}</p>` : ''}
       </form>
+      <details class="alt-sync" ${googleOn ? 'open' : ''}>
+        <summary>Of via Google (werkt meestal niet met een schoolaccount)</summary>
+        <form id="syncForm" class="grid">
+          <label>Google Client ID
+            <input name="clientId" autocomplete="off" placeholder="…apps.googleusercontent.com" value="${esc(s.clientId)}">
+          </label>
+          <div class="row">
+            <button class="primary">${googleOn ? 'Nu synchroniseren' : 'Inloggen met Google en synchroniseren'}</button>
+            ${googleOn ? '<button type="button" id="syncOff">Uitloggen</button>' : ''}
+          </div>
+          ${googleOn ? `<p class="muted small">${await syncStatusText()}</p>` : ''}
+        </form>
+      </details>
     </section>
     <section class="panel">
       <h3>Opslag</h3>
@@ -1219,10 +1239,31 @@ async function settingsView() {
     await db.setMeta('model', f.model.value);
     toast('Instellingen opgeslagen', 'ok');
   };
-  if (s.clientId) preloadGoogle();
+  if (googleOn) preloadGoogle();
+  document.getElementById('gistForm').onsubmit = async (e) => {
+    e.preventDefault();
+    const token = e.target.githubToken.value.trim();
+    if (!token) return toast('Plak eerst de GitHub-sleutel.', 'bad');
+    if (token !== s.githubToken) await db.setMeta('gistId', null);
+    await db.setMeta('githubToken', token);
+    await db.setMeta('syncMethod', 'github');
+    await runSync({ interactive: true });
+    settingsView();
+  };
+  const gistOff = document.getElementById('gistOff');
+  if (gistOff) {
+    gistOff.onclick = async () => {
+      await db.setMeta('githubToken', '');
+      await db.setMeta('gistId', null);
+      await db.setMeta('syncOn', false);
+      updateSyncButton();
+      settingsView();
+    };
+  }
   document.getElementById('syncForm').onsubmit = async (e) => {
     e.preventDefault();
     await db.setMeta('googleClientId', e.target.clientId.value.trim());
+    await db.setMeta('syncMethod', 'google');
     await runSync({ interactive: true });
     settingsView();
   };
@@ -1252,12 +1293,13 @@ async function updateSyncButton() {
   if (!btn) return;
   const on = await db.getMeta('syncOn', false);
   btn.hidden = !on;
-  const state = syncState === 'idle' && on && !hasValidToken() ? 'login' : syncState;
+  const google = (await db.getMeta('syncMethod', 'github')) === 'google';
+  const state = syncState === 'idle' && on && google && !hasValidToken() ? 'login' : syncState;
   btn.textContent = { busy: '⏳', ok: '☁️', login: '☁️❗', error: '☁️⚠️', idle: '☁️' }[state];
   btn.title = {
     busy: 'Bezig met synchroniseren…',
     ok: 'Gesynchroniseerd. Tik om opnieuw te synchroniseren.',
-    login: 'Tik om in te loggen en te synchroniseren',
+    login: google ? 'Tik om in te loggen en te synchroniseren' : 'De GitHub-sleutel klopt niet. Vul hem opnieuw in bij Instellingen.',
     error: 'Synchroniseren mislukt. Tik om opnieuw te proberen.',
     idle: 'Synchroniseren',
   }[state];
@@ -1265,9 +1307,10 @@ async function updateSyncButton() {
 
 // Synchroniseren. interactive = gestart door een tik (mag een Google-venster openen).
 async function runSync({ interactive = false } = {}) {
-  const { clientId } = await settings.get();
-  if (!clientId) {
-    if (interactive) toast('Vul eerst de Google Client ID in bij Instellingen.', 'bad');
+  const { clientId, syncMethod, githubToken } = await settings.get();
+  const viaGithub = syncMethod === 'github';
+  if (viaGithub ? !githubToken : !clientId) {
+    if (interactive) location.hash = '#/settings';
     return;
   }
   if (!navigator.onLine) {
@@ -1277,14 +1320,14 @@ async function runSync({ interactive = false } = {}) {
   syncState = 'busy';
   updateSyncButton();
   try {
-    const res = await syncNow({ clientId, interactive });
+    const res = viaGithub ? await syncGist(githubToken) : await syncNow({ clientId, interactive });
     await db.setMeta('syncOn', true);
     syncState = 'ok';
     if (interactive) toast(`Gesynchroniseerd: ${res.decks} ${res.decks === 1 ? 'hoofdstuk' : 'hoofdstukken'}, ${res.cards} ${res.cards === 1 ? 'kaartje' : 'kaartjes'}`, 'ok');
     // Lijsten opnieuw tonen met de nieuwe gegevens (niet midden in het overhoren).
     if (!/\/(study|photo|stone|add)$|settings/.test(location.hash)) route();
   } catch (err) {
-    syncState = err instanceof NeedsLogin ? 'login' : 'error';
+    syncState = err instanceof NeedsLogin || err instanceof BadToken ? 'login' : 'error';
     if (interactive) toast(err.message, 'bad');
     else console.warn('Synchroniseren mislukt:', err.message);
   }
@@ -1312,7 +1355,7 @@ route();
   if (!(await db.getMeta('syncOn', false))) return;
   updateSyncButton();
   // Google-inloggen alvast laden, zodat een tik op ☁️ direct het venster opent.
-  preloadGoogle();
+  if ((await db.getMeta('syncMethod', 'github')) === 'google') preloadGoogle();
   runSync();
 })();
 // Terug naar de app (bv. van het andere apparaat geoefend): opnieuw synchroniseren.

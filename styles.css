@@ -302,3 +302,5 @@ kbd { font-size: 0.7rem; opacity: 0.7; border: 1px solid currentColor; border-ra
 .example { text-align: center; font-size: 1.1rem; margin: 0.4rem auto 0.8rem; max-width: 40em; color: var(--muted); }
 .example .hl { color: var(--hl); }
 small.example { display: block; text-align: left; font-size: 0.8rem; margin: 0.2rem 0 0; }
+.alt-sync { margin-top: 1rem; }
+.alt-sync summary { cursor: pointer; color: var(--muted); }
