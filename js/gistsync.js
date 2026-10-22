@@ -30,14 +30,47 @@ async function gh(path, token, opts = {}) {
     throw new Error('GitHub is niet bereikbaar. Ben je online?');
   }
   if (res.status === 401) throw new BadToken();
-  if (res.status === 403 || res.status === 404) {
-    const err = new Error(res.status === 404 ? 'Niet gevonden bij GitHub.' : 'GitHub weigert de toegang. Heeft de sleutel het recht "gist"?');
+  if (!res.ok) {
+    let message = '';
+    try {
+      message = (await res.json()).message || '';
+    } catch {
+      /* geen uitleg van GitHub */
+    }
+    // Te vaak achter elkaar: GitHub remt af. Even wachten en later opnieuw.
+    const reset = Number(res.headers.get('x-ratelimit-reset')) * 1000;
+    const retry = Number(res.headers.get('retry-after')) * 1000;
+    if (res.status === 429 || ((res.status === 403 || res.status === 422) && (/rate limit|too many|abuse/i.test(message) || res.headers.get('x-ratelimit-remaining') === '0'))) {
+      const until = reset > Date.now() ? reset : Date.now() + (retry || 10 * 60_000);
+      throw new RateLimited(until);
+    }
+    let text = `GitHub gaf een fout (${res.status}${message ? `: ${message}` : ''}).`;
+    if (res.status === 403) text = `GitHub weigert de toegang${message ? ` (${message})` : ''}. Heeft de sleutel het recht "gist"?`;
+    if (res.status === 404) text = 'Niet gevonden bij GitHub.';
+    const err = new Error(text);
     err.status = res.status;
     throw err;
   }
-  if (!res.ok) throw new Error(`GitHub gaf een fout (${res.status}).`);
   return res.json();
 }
+
+export class RateLimited extends Error {
+  constructor(until) {
+    const min = Math.max(1, Math.round((until - Date.now()) / 60_000));
+    super(`GitHub: even te vaak gesynchroniseerd. Het gaat vanzelf weer over ± ${min} ${min === 1 ? 'minuut' : 'minuten'}.`);
+    this.until = until;
+  }
+}
+
+// Zelfde gegevens? (volgorde en tijdstip van synchroniseren tellen niet mee)
+function canonical(v) {
+  if (Array.isArray(v)) return v.map(canonical).sort((a, b) => (a.id || '').localeCompare(b.id || '') || JSON.stringify(a).localeCompare(JSON.stringify(b)));
+  if (v && typeof v === 'object') return Object.fromEntries(Object.keys(v).sort().map((k) => [k, canonical(v[k])]));
+  return v;
+}
+const sameData = (a, b) =>
+  JSON.stringify(canonical({ decks: a.decks || [], cards: a.cards || [], deleted: a.deleted || {}, prefs: a.prefs || {} })) ===
+  JSON.stringify(canonical({ decks: b.decks || [], cards: b.cards || [], deleted: b.deleted || {}, prefs: b.prefs || {} }));
 
 // De gist met onze gegevens zoeken (of null).
 async function findGist(token) {
@@ -70,10 +103,13 @@ const payload = (data) => ({
 let running = null;
 
 // Gegevens van dit apparaat en GitHub samenvoegen en op beide plekken opslaan.
-export function syncGist(token) {
+export function syncGist(token, { interactive = false } = {}) {
   if (!token) return Promise.reject(new BadToken());
   if (!running) {
     running = (async () => {
+      // Na afremmen door GitHub niet steeds opnieuw proberen (alleen als je zelf tikt).
+      const pause = await db.getMeta('gistPauseUntil', 0);
+      if (!interactive && pause > Date.now()) throw new RateLimited(pause);
       let id = await db.getMeta('gistId', null);
       let remote = {};
       if (id) {
@@ -91,7 +127,9 @@ export function syncGist(token) {
       const merged = mergeData(await db.exportAll(), remote);
       const saved = await db.applySynced(merged);
       if (id) {
-        await gh(`/gists/${id}`, token, { method: 'PATCH', body: JSON.stringify(payload(saved)) });
+        // Alleen schrijven als er iets veranderd is: GitHub staat maar een
+        // beperkt aantal wijzigingen per uur toe.
+        if (!sameData(saved, remote)) await gh(`/gists/${id}`, token, { method: 'PATCH', body: JSON.stringify(payload(saved)) });
       } else {
         const gist = await gh('/gists', token, {
           method: 'POST',
@@ -101,10 +139,16 @@ export function syncGist(token) {
       }
       await db.setMeta('gistId', id);
       await db.setMeta('lastSync', Date.now());
+      await db.setMeta('gistPauseUntil', 0);
       return { decks: saved.decks.length, cards: saved.cards.length };
-    })().finally(() => {
-      running = null;
-    });
+    })()
+      .catch(async (err) => {
+        if (err instanceof RateLimited) await db.setMeta('gistPauseUntil', err.until);
+        throw err;
+      })
+      .finally(() => {
+        running = null;
+      });
   }
   return running;
 }
