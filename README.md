@@ -1,6 +1,6 @@
 # Woordjes
 
-Een AnkiWeb-achtige app om woordjes en zinnen te overhoren (Engels ↔ Nederlands, ook Frans/Duits mogelijk), gemaakt voor de **Chromebook** en ook te gebruiken op de **iPhone**, met synchronisatie via Google Drive.
+Een AnkiWeb-achtige app om woordjes en zinnen te overhoren (Engels ↔ Nederlands, ook Frans/Duits mogelijk), gemaakt voor de **Chromebook** en ook te gebruiken op de **iPhone**, met synchronisatie tussen apparaten (via GitHub of Google Drive).
 
 - **Foto → kaartjes**: maak een foto van de woordenlijst in je leerboek (of kies een bestaande foto) en de app maakt de kaartjes. Daarna controleer en verbeter je ze voordat ze worden opgeslagen.
   - *Gratis tekstherkenning* (Tesseract OCR, in de browser): herkent kolommen zoals `the teacher    de leraar` of `house - huis`.
@@ -46,7 +46,27 @@ Als Claude een verzoek weigert, schakelt de API automatisch over op een ander mo
 
 ## Synchroniseren tussen apparaten
 
-Zelfde woordjes en voortgang op de Chromebook en de iPhone, via een verborgen app-map in Google Drive (alleen deze app kan erbij; in je gewone Drive zie je niets). Log op elk apparaat in met **hetzelfde Google-account**. Een gewoon Gmail-account werkt het makkelijkst: schoolaccounts blokkeren zulke apps soms.
+Zelfde woordjes en voortgang op de Chromebook en de iPhone. De gegevens gaan via een **geheime gist** op GitHub (een soort privénotitie). Dit werkt ook als de school Google-apps blokkeert.
+
+**Eenmalig: een GitHub-sleutel maken** (± 3 minuten, op je eigen laptop)
+
+1. Log in op <https://github.com> en ga naar <https://github.com/settings/tokens/new> (*Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate new token (classic)*).
+2. *Note*: `Woordjes`.
+3. *Expiration*: **No expiration** (anders moet je hem later opnieuw maken).
+4. Vink bij *Select scopes* **alleen `gist`** aan. Niets anders.
+5. Klik onderaan **Generate token** en kopieer de sleutel (begint met `ghp_`). Je ziet hem maar één keer; bewaar hem bijvoorbeeld in je wachtwoordmanager.
+
+**Op elk apparaat** (Chromebook en iPhone): ⚙ *Instellingen* → *Synchroniseren tussen apparaten* → plak de sleutel → **Synchroniseren starten**. Gebruik op alle apparaten **dezelfde sleutel**.
+
+De sleutel kan alleen gists lezen en schrijven, niets anders op je GitHub-account. Hij staat alleen op het apparaat zelf (niet in de back-up en niet in de gesynchroniseerde gegevens). Kwijt of uitgelekt? Verwijder hem op <https://github.com/settings/tokens> en maak een nieuwe.
+
+**Wanneer synchroniseert de app?** Bij het openen, een paar seconden na elke wijziging (overhoren, kaartjes toevoegen), als je terugkomt in de app, en met de ☁️-knop bovenin. ☁️❗ betekent: de sleutel klopt niet (meer); vul hem opnieuw in. De Claude-API-sleutel wordt niet gesynchroniseerd; vul die op elk apparaat in.
+
+**Samenvoegen:** per kaartje wint de laatste wijziging; voor de voortgang wint per richting de laatste keer overhoren, zodat oefenen op beide apparaten niet verloren gaat. Verwijderde kaartjes en hoofdstukken blijven verwijderd.
+
+### Alternatief: via Google Drive
+
+Werkt meestal niet met een schoolaccount (de school moet de app dan goedkeuren). In de app onder *Instellingen → Of via Google*.
 
 **Eenmalig: een Google Client ID aanmaken** (± 10 minuten)
 
@@ -66,9 +86,6 @@ Zelfde woordjes en voortgang op de Chromebook en de iPhone, via een verborgen ap
 
 Bij het inloggen zegt Google mogelijk dat de app *niet geverifieerd* is: dat klopt, het is je eigen app. Kies *Doorgaan*.
 
-**Wanneer synchroniseert de app?** Bij het openen, een paar seconden na elke wijziging (overhoren, kaartjes toevoegen), als je terugkomt in de app, en met de ☁️-knop bovenin. ☁️❗ betekent: tik om opnieuw in te loggen (Google laat een sessie na een uur verlopen). De Claude-API-sleutel wordt niet gesynchroniseerd; vul die op elk apparaat in.
-
-**Samenvoegen:** per kaartje wint de laatste wijziging; voor de voortgang wint per richting de laatste keer overhoren, zodat oefenen op beide apparaten niet verloren gaat. Verwijderde kaartjes en hoofdstukken blijven verwijderd.
 
 ## iPhone
 
@@ -87,6 +104,7 @@ js/check.js    controle van ingetypte antwoorden
 js/parse.js    tekst/OCR-regels → woordparen
 js/ocr.js      Tesseract.js (gratis OCR)
 js/claude.js   Claude API (foto → kaartjes, Stones)
+js/gistsync.js synchroniseren via GitHub (gist)
 js/sync.js     synchroniseren via Google Drive
 js/merge.js    samenvoegen van twee apparaten
 js/db.js       IndexedDB-opslag, back-up
