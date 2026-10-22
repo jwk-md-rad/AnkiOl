@@ -77,5 +77,23 @@ export function mergeData(a, b, now = Date.now()) {
     const c = mergeCard(ca.get(id), cb.get(id));
     if (!gone(c) && deckIds.has(c.deckId)) cards.push(c);
   }
-  return { decks, cards, deleted };
+  return { decks, cards, deleted, prefs: mergePrefs(a.prefs, b.prefs, deckIds) };
+}
+
+// Instellingen: per instelling wint de laatste wijziging. Het aantal nieuwe
+// woordjes van vandaag telt van beide apparaten (hoogste aantal van dezelfde dag).
+function mergePrefs(a = {}, b = {}, deckIds) {
+  const out = {};
+  for (const key of new Set([...Object.keys(a), ...Object.keys(b)])) {
+    const deck = key.match(/^(?:study|new):(.+)$/);
+    if (deck && !deckIds.has(deck[1])) continue;
+    const x = a[key];
+    const y = b[key];
+    let p = !x ? y : !y ? x : (y.updated || 0) > (x.updated || 0) ? y : x;
+    if (x && y && key.startsWith('new:') && x.value && y.value && x.value.day === y.value.day) {
+      p = { value: { day: x.value.day, count: Math.max(x.value.count, y.value.count) }, updated: Math.max(x.updated || 0, y.updated || 0) };
+    }
+    out[key] = { ...p };
+  }
+  return out;
 }

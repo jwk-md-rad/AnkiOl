@@ -62,6 +62,8 @@ De sleutel kan alleen gists lezen en schrijven, niets anders op je GitHub-accoun
 
 **Wanneer synchroniseert de app?** Bij het openen, een paar seconden na elke wijziging (overhoren, kaartjes toevoegen), als je terugkomt in de app, en met de ☁️-knop bovenin. ☁️❗ betekent: de sleutel klopt niet (meer); vul hem opnieuw in. De Claude-API-sleutel wordt niet gesynchroniseerd; vul die op elk apparaat in.
 
+**Wat synchroniseert?** Hoofdstukken, kaartjes en voortgang, én de overhoor-instellingen: per hoofdstuk de laatste keuze bij *Overhoren* (omdraaien/intypen, richting), het aantal nieuwe woordjes per dag (en hoeveel er vandaag al geweest zijn), voorlezen, aanmoedigingen, tweede kans en het Claude-model. Niet: de API-sleutel en de GitHub-sleutel.
+
 **Samenvoegen:** per kaartje wint de laatste wijziging; voor de voortgang wint per richting de laatste keer overhoren, zodat oefenen op beide apparaten niet verloren gaat. Verwijderde kaartjes en hoofdstukken blijven verwijderd.
 
 ### Alternatief: via Google Drive

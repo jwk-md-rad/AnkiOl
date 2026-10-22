@@ -141,8 +141,31 @@ export async function getMeta(key, fallback) {
   return row ? row.value : fallback;
 }
 
-export const setMeta = (key, value) =>
-  tx(['meta'], 'readwrite', (t) => wrap(t.objectStore('meta').put({ key, value })));
+// Overhoor-instellingen die mee synchroniseren tussen apparaten (met tijdstip,
+// zodat de laatste wijziging wint). Sleutels als de API-sleutel blijven lokaal.
+export const SYNCED_PREF = /^(newPerDay|speak|cheer|secondChance|model|study:.+|new:.+)$/;
+
+export async function setMeta(key, value) {
+  const synced = SYNCED_PREF.test(key);
+  let changed = true;
+  await tx(['meta'], 'readwrite', async (t) => {
+    const store = t.objectStore('meta');
+    if (synced) {
+      // Niet veranderd: tijdstip laten staan, anders wint dit apparaat onterecht.
+      const old = await wrap(store.get(key));
+      changed = !old || JSON.stringify(old.value) !== JSON.stringify(value);
+      if (changed) store.put({ key, value, updated: Date.now() });
+    } else store.put({ key, value });
+  });
+  if (synced && changed) onChange();
+}
+
+async function readPrefs(t) {
+  const rows = await wrap(t.objectStore('meta').getAll());
+  const prefs = {};
+  for (const r of rows) if (SYNCED_PREF.test(r.key)) prefs[r.key] = { value: r.value, updated: r.updated || 0 };
+  return prefs;
+}
 
 export async function exportAll() {
   return {
@@ -152,6 +175,7 @@ export async function exportAll() {
     decks: await listDecks(),
     cards: await allCards(),
     deleted: await getMeta('deleted', {}),
+    prefs: await tx(['meta'], 'readonly', readPrefs),
   };
 }
 
@@ -165,6 +189,7 @@ export async function applySynced(synced) {
       decks: await wrap(t.objectStore('decks').getAll()),
       cards: await wrap(t.objectStore('cards').getAll()),
       deleted: ((await wrap(t.objectStore('meta').get('deleted'))) || {}).value || {},
+      prefs: await readPrefs(t),
     };
     result = mergeData(current, synced);
     t.objectStore('decks').clear();
@@ -172,6 +197,7 @@ export async function applySynced(synced) {
     for (const d of result.decks) t.objectStore('decks').put(d);
     for (const c of result.cards) t.objectStore('cards').put(c);
     t.objectStore('meta').put({ key: 'deleted', value: result.deleted });
+    for (const [key, p] of Object.entries(result.prefs)) t.objectStore('meta').put({ key, value: p.value, updated: p.updated });
   });
   return result;
 }
