@@ -304,3 +304,4 @@ kbd { font-size: 0.7rem; opacity: 0.7; border: 1px solid currentColor; border-ra
 small.example { display: block; text-align: left; font-size: 0.8rem; margin: 0.2rem 0 0; }
 .alt-sync { margin-top: 1rem; }
 .alt-sync summary { cursor: pointer; color: var(--muted); }
+.bad-text { color: #c92a2a; }

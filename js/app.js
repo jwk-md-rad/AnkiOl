@@ -1283,7 +1283,9 @@ async function settingsView() {
 async function syncStatusText() {
   const last = await db.getMeta('lastSync', 0);
   if (!(await db.getMeta('syncOn', false))) return 'Nog niet ingesteld.';
-  return last ? `Laatst gesynchroniseerd: ${new Date(last).toLocaleString('nl-NL', { dateStyle: 'medium', timeStyle: 'short' })}` : 'Nog niet gesynchroniseerd.';
+  const error = await db.getMeta('lastSyncError', '');
+  const ok = last ? `Laatst gesynchroniseerd: ${new Date(last).toLocaleString('nl-NL', { dateStyle: 'medium', timeStyle: 'short' })}` : 'Nog niet gesynchroniseerd.';
+  return error ? `${esc(ok)}<br><span class="bad-text">⚠️ Laatste poging mislukt: ${esc(error)}</span>` : esc(ok);
 }
 
 let syncState = 'idle'; // idle | busy | ok | login | error
@@ -1320,14 +1322,17 @@ async function runSync({ interactive = false } = {}) {
   syncState = 'busy';
   updateSyncButton();
   try {
-    const res = viaGithub ? await syncGist(githubToken) : await syncNow({ clientId, interactive });
+    const res = viaGithub ? await syncGist(githubToken, { interactive }) : await syncNow({ clientId, interactive });
     await db.setMeta('syncOn', true);
+    await db.setMeta('lastSyncError', '');
     syncState = 'ok';
     if (interactive) toast(`Gesynchroniseerd: ${res.decks} ${res.decks === 1 ? 'hoofdstuk' : 'hoofdstukken'}, ${res.cards} ${res.cards === 1 ? 'kaartje' : 'kaartjes'}`, 'ok');
     // Lijsten opnieuw tonen met de nieuwe gegevens (niet midden in het overhoren).
     if (!/\/(study|photo|stone|add)$|settings/.test(location.hash)) route();
   } catch (err) {
     syncState = err instanceof NeedsLogin || err instanceof BadToken ? 'login' : 'error';
+    // Laatste foutmelding bewaren: zichtbaar bij Instellingen.
+    await db.setMeta('lastSyncError', `${err.message} (${new Date().toLocaleString('nl-NL', { dateStyle: 'short', timeStyle: 'short' })})`);
     if (interactive) toast(err.message, 'bad');
     else console.warn('Synchroniseren mislukt:', err.message);
   }
