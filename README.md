@@ -113,3 +113,5 @@ js/db.js       IndexedDB-opslag, back-up
 ```
 
 Tests: `npm test`
+
+**Versie:** bij elke update `APP_VERSION` in `js/version.js` ophogen (bv. `2026.10.23-1`). De app vergelijkt die met de versie online: op het startscherm laadt hij een nieuwe versie meteen, tijdens het overhoren verschijnt een balk *Tik om bij te werken*. De versie staat ook bij Instellingen, met de knop *Zoek naar update*.

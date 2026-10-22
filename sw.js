@@ -1,5 +1,5 @@
 // Service worker: houdt de app offline beschikbaar.
-const CACHE = 'woordjes-v23';
+const CACHE = 'woordjes-v24';
 const SHELL = [
   './',
   'index.html',
@@ -22,6 +22,7 @@ const SHELL = [
   'js/sync.js',
   'js/gistsync.js',
   'js/cheer.js',
+  'js/version.js',
 ];
 
 self.addEventListener('install', (e) => {
@@ -45,8 +46,10 @@ self.addEventListener('fetch', (e) => {
 
   if (url.origin === location.origin) {
     // Eigen bestanden: eerst netwerk (voor updates), anders uit de cache.
+    // no-cache: altijd bij de server navragen of er iets nieuws is (de browser
+    // bewaart bestanden van GitHub Pages anders tot 10 minuten).
     e.respondWith(
-      fetch(req)
+      fetch(req.url, { cache: 'no-cache', credentials: 'same-origin' })
         .then((res) => {
           const copy = res.clone();
           caches.open(CACHE).then((c) => c.put(req, copy));

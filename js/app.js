@@ -9,6 +9,7 @@ import { GOOGLE_CLIENT_ID } from './config.js';
 import { nextGap, pick, showCheer } from './cheer.js';
 import { syncNow, NeedsLogin, hasValidToken, signOut, preloadGoogle } from './sync.js';
 import { syncGist, BadToken } from './gistsync.js';
+import { APP_VERSION } from './version.js';
 
 const $app = document.getElementById('app');
 const LANGS = { en: 'Engels', nl: 'Nederlands', fr: 'Frans', de: 'Duits' };
@@ -1227,7 +1228,25 @@ async function settingsView() {
     <section class="panel">
       <h3>Opslag</h3>
       <p class="muted">${persisted ? '✓ Je woordjes worden permanent bewaard.' : 'Chrome kan gegevens opruimen als de schijf vol raakt. Installeer de app (⊕ in de adresbalk) en maak regelmatig een back-up.'}</p>
+    </section>
+    <section class="panel">
+      <h3>Versie</h3>
+      <p>Deze app: <b>${APP_VERSION}</b> · <span id="versionState" class="muted">controleren…</span></p>
+      <button type="button" id="checkVersion">Zoek naar update</button>
     </section>`);
+  const showVersionState = (latest) => {
+    const el = document.getElementById('versionState');
+    if (!el) return;
+    if (!latest) el.textContent = 'kon niet controleren (offline?)';
+    else if (latest === APP_VERSION) el.textContent = '✓ dit is de nieuwste versie';
+    else el.innerHTML = `nieuwe versie <b>${esc(latest)}</b> beschikbaar`;
+  };
+  checkForUpdate().then(showVersionState);
+  document.getElementById('checkVersion').onclick = async () => {
+    const latest = await checkForUpdate();
+    showVersionState(latest);
+    if (latest && latest !== APP_VERSION) location.reload();
+  };
   document.getElementById('settings').onsubmit = async (e) => {
     e.preventDefault();
     const f = e.target;
@@ -1348,6 +1367,42 @@ db.setOnChange(() => {
   }, 5000);
 });
 
+// ---------- Versie ----------
+
+// Welke versie staat er online? (null = niet te controleren, bv. offline)
+async function onlineVersion() {
+  try {
+    const res = await fetch('js/version.js', { cache: 'no-store' });
+    if (!res.ok) return null;
+    const m = (await res.text()).match(/APP_VERSION\s*=\s*'([^']+)'/);
+    return m ? m[1] : null;
+  } catch {
+    return null;
+  }
+}
+
+let lastVersionCheck = 0;
+
+// Nieuwere versie online? Op een rustig scherm meteen bijwerken, anders
+// (bv. midden in het overhoren) een balk tonen om zelf bij te werken.
+async function checkForUpdate() {
+  lastVersionCheck = Date.now();
+  const latest = await onlineVersion();
+  if (latest && latest !== APP_VERSION) {
+    // Rustig = startscherm of de woordenlijst van een hoofdstuk (niet overhoren, foto, intypen…).
+    const quiet = /^(#\/?)?$/.test(location.hash) || /^#\/deck\/[^/]+$/.test(location.hash);
+    if (quiet && !sessionStorage.getItem('reloadedFor' + latest)) {
+      // Niet blijven herladen als de nieuwe versie nog niet overal klaar staat.
+      sessionStorage.setItem('reloadedFor' + latest, '1');
+      location.reload();
+    } else {
+      document.getElementById('updateBar').hidden = false;
+    }
+  }
+  return latest;
+}
+document.getElementById('updateBar').onclick = () => location.reload();
+
 // ---------- Start ----------
 
 if ('serviceWorker' in navigator) {
@@ -1356,6 +1411,7 @@ if ('serviceWorker' in navigator) {
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
 document.getElementById('syncBtn').onclick = () => runSync({ interactive: true });
 route();
+checkForUpdate();
 (async () => {
   if (!(await db.getMeta('syncOn', false))) return;
   updateSyncButton();
@@ -1365,5 +1421,7 @@ route();
 })();
 // Terug naar de app (bv. van het andere apparaat geoefend): opnieuw synchroniseren.
 document.addEventListener('visibilitychange', async () => {
+  // Terug in de app: af en toe kijken of er een nieuwe versie is.
+  if (document.visibilityState === 'visible' && Date.now() - lastVersionCheck > 10 * 60_000) checkForUpdate();
   if (document.visibilityState === 'visible' && (await db.getMeta('syncOn', false))) runSync();
 });
