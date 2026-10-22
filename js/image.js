@@ -1,6 +1,8 @@
 // Foto inlezen, verkleinen en eventueel grijs maken.
 
 // iPhones bewaren foto's als HEIC; Chrome kan dat niet zelf openen.
+// libheif kan ook de nieuwste iPhone-foto's aan; heic2any is de reserve.
+const LIBHEIF_URL = 'https://cdn.jsdelivr.net/npm/libheif-js@1.19.8/libheif-wasm/libheif-bundle.mjs';
 const HEIC2ANY_URL = 'https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js';
 
 export function isHeic(file) {
@@ -27,12 +29,44 @@ async function heicToJpeg(file) {
   return Array.isArray(out) ? out[0] : out;
 }
 
+let libheifPromise;
+
+async function decodeHeif(file) {
+  if (!libheifPromise) {
+    libheifPromise = import(LIBHEIF_URL).then((m) => m.default()).catch((e) => {
+      libheifPromise = null;
+      throw e;
+    });
+  }
+  const libheif = await libheifPromise;
+  const decoder = new libheif.HeifDecoder();
+  const images = decoder.decode(new Uint8Array(await file.arrayBuffer()));
+  if (!images.length) throw new Error('Geen foto gevonden in het HEIC-bestand.');
+  const image = images[0];
+  const width = image.get_width();
+  const height = image.get_height();
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  const data = ctx.createImageData(width, height);
+  await new Promise((resolve, reject) => image.display(data, (out) => (out ? resolve() : reject(new Error('HEIC kon niet gelezen worden.')))));
+  ctx.putImageData(data, 0, 0);
+  for (const img of images) img.free?.();
+  return createImageBitmap(canvas);
+}
+
 export async function loadImage(file) {
   try {
     return await createImageBitmap(file, { imageOrientation: 'from-image' });
   } catch (err) {
     if (!isHeic(file)) throw err;
-    return createImageBitmap(await heicToJpeg(file));
+    try {
+      return await decodeHeif(file);
+    } catch (e) {
+      console.warn('libheif lukte niet, probeer heic2any:', e);
+      return createImageBitmap(await heicToJpeg(file));
+    }
   }
 }
 

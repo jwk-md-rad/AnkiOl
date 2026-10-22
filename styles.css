@@ -3,6 +3,7 @@
   --panel: #ffffff;
   --text: #1d2433;
   --muted: #667085;
+  --hl: #d9661f;
   --line: #dde2ec;
   --primary: #2f6fde;
   --primary-text: #fff;
@@ -23,6 +24,7 @@
     --panel: #1b2029;
     --text: #e6e9ef;
     --muted: #98a2b3;
+    --hl: #f39a5b;
     --line: #2d3443;
     --primary: #5b8ff0;
     --new: #74a3f5;
@@ -295,3 +297,8 @@ kbd { font-size: 0.7rem; opacity: 0.7; border: 1px solid currentColor; border-ra
   .rates { grid-template-columns: repeat(2, 1fr); }
   table.cards td:nth-child(3).muted, table.cards th:nth-child(3) { display: none; }
 }
+
+/* Voorbeeldzin bij een woordje (woord in het oranje, zoals in het boek) */
+.example { text-align: center; font-size: 1.1rem; margin: 0.4rem auto 0.8rem; max-width: 40em; color: var(--muted); }
+.example .hl { color: var(--hl); }
+small.example { display: block; text-align: left; font-size: 0.8rem; margin: 0.2rem 0 0; }

@@ -91,8 +91,11 @@ export const listCards = (deckId) =>
 
 export const allCards = () => tx(['cards'], 'readonly', (t) => wrap(t.objectStore('cards').getAll()));
 
-export function makeCard(deckId, front, back) {
-  return { id: uid(), deckId, front, back, created: Date.now(), fwd: newState(), rev: newState() };
+// example: voorbeeldzin uit het boek waarin het woord staat (optioneel).
+export function makeCard(deckId, front, back, example = '') {
+  const card = { id: uid(), deckId, front, back, created: Date.now(), fwd: newState(), rev: newState() };
+  if (example && example.trim()) card.example = example.trim();
+  return card;
 }
 
 // Stone-oefening: één kaartje met meerdere varianten (prompt → antwoord).
