@@ -305,3 +305,6 @@ small.example { display: block; text-align: left; font-size: 0.8rem; margin: 0.2
 .alt-sync { margin-top: 1rem; }
 .alt-sync summary { cursor: pointer; color: var(--muted); }
 .bad-text { color: #c92a2a; }
+
+/* Nieuwe versie beschikbaar */
+.update-bar { display: block; width: 100%; border: 0; border-radius: 0; padding: 10px 16px; background: var(--primary); color: #fff; font-size: 0.95rem; text-align: center; cursor: pointer; }
