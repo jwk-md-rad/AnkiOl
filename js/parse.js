@@ -435,3 +435,292 @@ export function pairsFromLines(lines) {
   }
   return out;
 }
+
+// ---------- Gekleurde woorden in voorbeeldzinnen ----------
+//
+// Sommige bladzijdes geven Engelse voorbeeldzinnen waarin het te leren woord
+// oranje is, met rechts (achter een vakje) de Nederlandse vertaling van dat
+// woord. Dan: oranje woorden = voorkant, vertaling = achterkant, zin = voorbeeld.
+
+// Is de inkt van dit woord gekleurd (oranje/rood) in plaats van zwart?
+// data: pixels als [r, g, b, (a), r, g, b, (a), ...].
+export function highlightInk(data, stride = 4) {
+  const n = Math.floor(data.length / stride);
+  if (n < 20) return false;
+  const lum = new Float32Array(n);
+  for (let i = 0; i < n; i++) lum[i] = Math.min(data[i * stride], data[i * stride + 1], data[i * stride + 2]);
+  const bg = [...lum].sort((a, b) => a - b)[Math.floor(n * 0.8)];
+  let r = 0;
+  let b = 0;
+  let k = 0;
+  for (let i = 0; i < n; i++) {
+    if (lum[i] < bg * 0.7) {
+      r += data[i * stride];
+      b += data[i * stride + 2];
+      k++;
+    }
+  }
+  if (k < 5) return false;
+  r /= k;
+  b /= k;
+  return r - b >= 50 && (r - b) / r >= 0.3;
+}
+
+// Woorden van links naar rechts aan elkaar rijgen tot regels; volgt ook
+// regels die door een bolle bladzijde krom lopen.
+function chainsOf(words, H) {
+  const ws = [...words].sort((a, b) => a.bbox.x0 - b.bbox.x0);
+  const yc = (w) => (w.bbox.y0 + w.bbox.y1) / 2;
+  const next = new Map();
+  const hasPrev = new Set();
+  for (const w of ws) {
+    let best = null;
+    let bestD = Infinity;
+    for (const v of ws) {
+      if (v === w || hasPrev.has(v)) continue;
+      const gap = v.bbox.x0 - w.bbox.x1;
+      const dy = Math.abs(yc(v) - yc(w));
+      if (gap < -H * 0.5 || gap > H * 2.2 || dy > H * 0.55) continue;
+      if (gap + dy * 4 < bestD) {
+        bestD = gap + dy * 4;
+        best = v;
+      }
+    }
+    if (best) {
+      next.set(w, best);
+      hasPrev.add(best);
+    }
+  }
+  const chains = [];
+  for (const w of ws) {
+    if (hasPrev.has(w)) continue;
+    const c = [w];
+    for (let cur = w; next.has(cur); ) c.push((cur = next.get(cur)));
+    chains.push(c);
+  }
+  return chains;
+}
+
+// Helling van een regel: mediaan van de hellingen tussen woordparen (een
+// woord met een staart onder de regel, zoals "g", telt dan nauwelijks mee).
+function chainSlope(c, H) {
+  const pts = c.map((w) => [(w.bbox.x0 + w.bbox.x1) / 2, w.bbox.y1]);
+  const ms = [];
+  for (let i = 0; i < pts.length; i++) {
+    for (let j = i + 1; j < pts.length; j++) {
+      const dx = pts[j][0] - pts[i][0];
+      if (dx > H * 3) ms.push((pts[j][1] - pts[i][1]) / dx);
+    }
+  }
+  const width = c[c.length - 1].bbox.x1 - c[0].bbox.x0;
+  return ms.length >= 3 && width > H * 12 ? median(ms) : null;
+}
+
+// Woorden samenvoegen; een heel kleine tussenruimte is één woord dat de OCR in stukken knipte.
+function joinWords(ws, H) {
+  let out = '';
+  ws.forEach((w, k) => {
+    const prev = ws[k - 1];
+    const glued = k && w.bbox.x0 - prev.bbox.x1 <= H * 0.2 && !SHORT_WORDS.test(prev.text) && /\p{L}$/u.test(prev.text) && /^\p{Ll}/u.test(w.text);
+    if (k && !glued) out += ' ';
+    out += w.text;
+  });
+  return out.replace(/\s+/g, ' ').trim();
+}
+
+const bare = (t) => t.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
+
+// Voorbeeldzin opschonen: losse "|" is meestal "I", rommel vooraan weg.
+function cleanSentence(s) {
+  return s
+    .replace(/(^|\s)\|(?=\s)/g, '$1I')
+    .replace(/^(?:[^\p{L}\s]+\s+|\d+\s+)+/u, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Rechte lijn door punten [x, y] die bij de meeste punten past (binnen tol).
+function robustLine(pts, tol, maxSlope, minDx) {
+  let best = null;
+  let bestN = 0;
+  for (const p of pts) {
+    for (const q of pts) {
+      if (q[0] - p[0] < minDx) continue;
+      const m = (q[1] - p[1]) / (q[0] - p[0]);
+      if (Math.abs(m) > maxSlope) continue;
+      const f = (x) => p[1] + m * (x - p[0]);
+      const n = pts.filter(([x, y]) => Math.abs(y - f(x)) < tol).length;
+      if (n > bestN) {
+        bestN = n;
+        best = f;
+      }
+    }
+  }
+  return best;
+}
+
+// Tesseract-regels waarvan de woorden een vlag `hl` (gekleurd) hebben → kaartjes
+// met voorbeeldzin. Geeft null als de bladzijde niet zo is opgebouwd.
+export function pairsFromHighlights(lines) {
+  const words = (lines || []).flatMap((l) => l.words || []).filter((w) => w.text && w.text.trim() && w.confidence >= 20);
+  if (!words.length) return null;
+  const H = median(words.map((w) => w.bbox.y1 - w.bbox.y0)) || 10;
+  const isHl = (w) => w.hl && /\p{L}/u.test(w.text);
+  const chains = chainsOf(words, H);
+  const anchors = chains.filter((c) => c.some(isHl));
+  // Zinnen: het gekleurde woord staat tussen (veel) gewone woorden. Een
+  // woordenlijst met gekleurde woordjes (en vakjes ervoor) is iets anders.
+  const sentenceLike = (c) => {
+    const plain = c.filter((w) => !w.hl && /\p{L}{2,}/u.test(w.text) && !isMark(w.text)).length;
+    return plain >= 3 && plain >= 2 * c.filter(isHl).length;
+  };
+  const nSentences = anchors.filter(sentenceLike).length;
+  if (nSentences < 3 || nSentences < anchors.length * 0.5) return null;
+  const X0 = Math.min(...words.map((w) => w.bbox.x0));
+  const X1 = Math.max(...words.map((w) => w.bbox.x1));
+
+  // Vertalingen: rechts, niet gekleurd, beginnend in één (door het perspectief
+  // schuine) kolom met vakjes.
+  const cands = [];
+  for (const c of chains) {
+    if (c.some(isHl)) continue;
+    // Stuk zin + vakje + vertaling aan elkaar geregen: vanaf het laatste vakje.
+    let k = c.length - 1;
+    while (k > 0 && !(isMark(c[k - 1].text) && (k < 2 || c[k - 1].bbox.x0 - c[k - 2].bbox.x1 > H * 0.6))) k--;
+    const ws = k > 0 ? c.slice(k - 1) : c;
+    if (ws[0].bbox.x0 < X0 + (X1 - X0) * 0.4) continue;
+    cands.push({ x: ws[0].bbox.x0, y: median(ws.map((w) => w.bbox.y1)), ws });
+  }
+  // Kolomlijn: x als functie van y.
+  const colLine = robustLine(cands.map((d) => [d.y, d.x]), H * 1.5, 0.3, H * 3);
+  if (!colLine) return null;
+  const dutch = [];
+  for (const d of cands) {
+    if (Math.abs(d.x - colLine(d.y)) >= H * 2) continue;
+    let ws = d.ws;
+    // Kort eerste woordje op de kolomlijn met nog tekst erachter = het vakje.
+    if (ws.length > 1 && ws[0].text.length <= 3 && Math.abs(ws[0].bbox.x0 - colLine(d.y)) < H * 0.8) ws = ws.slice(1);
+    ws = stripMarks(ws);
+    const text = joinWords(ws, H).replace(/^[\s|:;,.=—_-]+|[\s|:;=—_-]+$/g, '');
+    if (/\p{L}{2,}/u.test(text)) dutch.push({ x: d.x, y: d.y, text });
+  }
+  if (!dutch.length) return null;
+
+  // Helling ter plekke: mediaan van de lange regels in de buurt.
+  const sloped = chains.map((c) => [c, chainSlope(c, H)]).filter(([, m]) => m !== null);
+  const slopeNear = (y) =>
+    median(
+      [...sloped]
+        .sort((p, q) => Math.abs(p[0][0].bbox.y1 - y) - Math.abs(q[0][0].bbox.y1 - y))
+        .slice(0, 5)
+        .map(([, m]) => m)
+    );
+  const margin = median(anchors.map((c) => c[0].bbox.x0));
+  const items = anchors
+    .map((c) => {
+      const y0 = median(c.map((w) => w.bbox.y1));
+      const xm = median(c.map((w) => (w.bbox.x0 + w.bbox.x1) / 2));
+      const m = slopeNear(y0);
+      const at = (x) => y0 + m * (x - xm);
+      // Hoogte bij de kolom met vertalingen (de foto staat vaak scheef).
+      const y = at(colLine(at(colLine(y0))));
+      // Gekleurde woorden, ook als ze niet naast elkaar staan ("be very lucky" → "be lucky").
+      const groups = [];
+      c.forEach((w, k) => {
+        if (!isHl(w)) return;
+        const g = groups[groups.length - 1];
+        if (g && g.last === k - 1) {
+          g.ws.push(w);
+          g.last = k;
+        } else groups.push({ ws: [w], last: k });
+      });
+      const front = groups.map((g) => bare(joinWords(g.ws, H))).filter(Boolean).join(' ');
+      // Afgesneden stukje aan de rand van de foto: wel tonen, niet aanvinken.
+      const cut = isHl(c[0]) && c[0].bbox.x0 > margin + H * 3;
+      return { y, right: c[c.length - 1].bbox.x1, front, example: cleanSentence(joinWords(c, H)), cut };
+    })
+    .filter((a) => a.front)
+    .sort((a, b) => a.y - b.y);
+  dutch.sort((a, b) => a.y - b.y);
+  const ys = items.map((a) => a.y);
+  const spacing = median(ys.slice(1).map((y, k) => y - ys[k]).filter((d) => d > H * 0.6)) || H * 1.6;
+
+  // De bladzijde buigt: de afwijking tussen zin en vertaling verloopt over de
+  // hoogte. Rechte lijn door de verschillen die het vaakst kloppen.
+  const diffs = [];
+  for (const a of items) {
+    for (const d of dutch) if (d.x > a.right && Math.abs(d.y - a.y) < spacing * 1.5) diffs.push([a.y, d.y - a.y]);
+  }
+  const fix = robustLine(diffs, spacing * 0.2, 0.15, spacing * 3) || (() => 0);
+  const resid = (a, d) => (d.x > a.right ? Math.abs(d.y - a.y - fix(a.y)) / spacing : Infinity);
+
+  // Van boven naar beneden koppelen zonder dat lijnen elkaar kruisen.
+  const n = items.length;
+  const m = dutch.length;
+  const score = Array.from({ length: n + 1 }, () => new Float64Array(m + 1));
+  const move = Array.from({ length: n + 1 }, () => new Uint8Array(m + 1));
+  for (let i = 1; i <= n; i++) {
+    for (let j = 1; j <= m; j++) {
+      let v = score[i - 1][j];
+      let mv = 1;
+      if (score[i][j - 1] > v) {
+        v = score[i][j - 1];
+        mv = 2;
+      }
+      const r = resid(items[i - 1], dutch[j - 1]);
+      if (r < 0.45 && score[i - 1][j - 1] + 1 - r > v) {
+        v = score[i - 1][j - 1] + 1 - r;
+        mv = 3;
+      }
+      score[i][j] = v;
+      move[i][j] = mv;
+    }
+  }
+  const back = new Map();
+  for (let i = n, j = m; i > 0 && j > 0; ) {
+    if (move[i][j] === 3) back.set(items[--i], dutch[--j]);
+    else if (move[i][j] === 1) i--;
+    else j--;
+  }
+  // Gaten opvullen: tussen twee koppels evenveel zinnen als vertalingen over?
+  // Dan horen ze bij elkaar, ook als de hoogte wat minder precies klopt.
+  const index = new Map(dutch.map((d, j) => [d, j]));
+  for (let i = 0; i < n; ) {
+    if (back.has(items[i])) {
+      i++;
+      continue;
+    }
+    let e = i;
+    while (e < n && !back.has(items[e])) e++;
+    const lo = i > 0 ? index.get(back.get(items[i - 1])) : -1;
+    const hi = e < n ? index.get(back.get(items[e])) : m;
+    const free = dutch.slice(lo + 1, hi);
+    if (free.length === e - i) {
+      free.forEach((d, k) => {
+        if (resid(items[i + k], d) < 1) back.set(items[i + k], d);
+      });
+    }
+    i = e;
+  }
+  return items.map((a) => {
+    const d = back.get(a);
+    return { front: a.front, back: d ? d.text : '', example: a.example, ok: !!d && !a.cut && plausible(a.front) };
+  });
+}
+
+// Waar staat het woord (of de woordgroep) in de voorbeeldzin? Geeft [begin, eind]-stukken.
+// Werkt ook met vervoegingen ("focus" in "focusing") en losse delen ("be lucky" in "be very lucky").
+export function findInSentence(sentence, phrase) {
+  const want = String(phrase).toLowerCase().match(/[\p{L}\p{N}'’]+/gu) || [];
+  if (!want.length) return [];
+  const tokens = [...String(sentence).matchAll(/[\p{L}\p{N}'’-]+/gu)];
+  const out = [];
+  let t = 0;
+  for (const w of want) {
+    while (t < tokens.length && !tokens[t][0].toLowerCase().startsWith(w)) t++;
+    if (t === tokens.length) return [];
+    out.push([tokens[t].index, tokens[t].index + tokens[t][0].length]);
+    t++;
+  }
+  return out;
+}

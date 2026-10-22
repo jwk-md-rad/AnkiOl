@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { newState, schedule, AGAIN, HARD, GOOD, EASY, MINUTE, previewLabels } from '../js/srs.js';
 import { checkAnswer, normalize } from '../js/check.js';
-import { pairsFromText, pairsFromLines, plausible } from '../js/parse.js';
+import { pairsFromText, pairsFromLines, plausible, pairsFromHighlights, highlightInk, findInSentence } from '../js/parse.js';
 import { Session, countDue, nextVariant, dirsFor, addVariants, needsMoreVariants } from '../js/session.js';
 
 const NOW = new Date('2026-10-02T15:00:00').getTime();
@@ -322,4 +322,73 @@ test('apostrof vergeten = bijna goed met tweede kans', async () => {
   assert.equal(oneLetterOff('cant', "can't"), true);
   assert.equal(oneLetterOff("can't", "can't"), false);
   assert.equal(oneLetterOff('cannot', "can't"), false); // gewoon goed
+});
+
+// Nep-OCR van een bladzijde met voorbeeldzinnen (oranje woord) en rechts de vertaling.
+function fakeHighlightPage(rows, { slope = 0.04, curve = 0.00002 } = {}) {
+  const H = 30;
+  const words = [];
+  rows.forEach(([sentence, hl, dutch], i) => {
+    const base = 200 + i * 55;
+    const yAt = (x) => base + slope * x + curve * x * x;
+    let x = 100;
+    for (const t of sentence.split(' ')) {
+      const w = t.length * 16;
+      words.push({ text: t, confidence: 92, hl: hl.includes(t.replace(/[.,!?]$/, '')), bbox: { x0: x, x1: x + w, y0: yAt(x) - H, y1: yAt(x) } });
+      x += w + 12;
+    }
+    if (!dutch) return;
+    x = 1500 + i * 3; // kolom loopt door het perspectief iets schuin
+    for (const t of ['O', ...dutch.split(' ')]) {
+      const w = t.length * 16;
+      words.push({ text: t, confidence: 90, hl: false, bbox: { x0: x, x1: x + w, y0: yAt(x) - H, y1: yAt(x) } });
+      x += w + 12;
+    }
+  });
+  return [{ words }];
+}
+
+test('oranje woorden in voorbeeldzinnen worden kaartjes met voorbeeldzin', () => {
+  const rows = pairsFromHighlights(
+    fakeHighlightPage([
+      ["It's almost time to leave for school.", ['almost'], 'bijna'],
+      ['You really have to use your brain.', ['brain'], 'hersenen'],
+      ['If you miss school, you have to catch up on assignments.', ['catch', 'up'], 'inhalen'],
+      ['We have to be very lucky to have such nice neighbours.', ['be', 'lucky'], 'geluk hebben, mazzel hebben'],
+      ['It is hard to focus on your homework.', ['focus'], 'zich concentreren'],
+      ['Our teacher always wants complete silence.', ['silence'], 'stilte'],
+    ])
+  );
+  assert.deepEqual(
+    rows.map((r) => [r.front, r.back, r.ok]),
+    [
+      ['almost', 'bijna', true],
+      ['brain', 'hersenen', true],
+      ['catch up', 'inhalen', true],
+      ['be lucky', 'geluk hebben, mazzel hebben', true],
+      ['focus', 'zich concentreren', true],
+      ['silence', 'stilte', true],
+    ]
+  );
+  assert.equal(rows[2].example, 'If you miss school, you have to catch up on assignments.');
+  // Gewone woordenlijst zonder gekleurde woorden: niet deze indeling.
+  assert.equal(pairsFromHighlights(fakeOcr([['house', 100, 0], ['huis', 600, 0], ['tree', 100, 1], ['boom', 600, 1]])), null);
+});
+
+test('kleur van de inkt: oranje of zwart', () => {
+  const px = (ink) => {
+    const d = [];
+    for (let i = 0; i < 200; i++) d.push(...(i % 3 ? [235, 228, 215, 255] : [...ink, 255]));
+    return d;
+  };
+  assert.equal(highlightInk(px([180, 115, 80])), true);
+  assert.equal(highlightInk(px([65, 48, 40])), false);
+  assert.equal(highlightInk(px([40, 40, 40])), false);
+});
+
+test('woord terugvinden in de voorbeeldzin', () => {
+  const s = 'We have to be very lucky to have such nice neighbours.';
+  assert.deepEqual(findInSentence(s, 'be lucky').map(([a, b]) => s.slice(a, b)), ['be', 'lucky']);
+  assert.deepEqual(findInSentence('He is focusing.', 'focus').map(([a, b]) => 'He is focusing.'.slice(a, b)), ['focusing']);
+  assert.deepEqual(findInSentence('Nothing here.', 'brain'), []);
 });

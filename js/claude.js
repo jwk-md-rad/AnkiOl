@@ -14,8 +14,9 @@ const SCHEMA = {
         properties: {
           front: { type: 'string' },
           back: { type: 'string' },
+          example: { type: 'string' },
         },
-        required: ['front', 'back'],
+        required: ['front', 'back', 'example'],
         additionalProperties: false,
       },
     },
@@ -64,12 +65,14 @@ Maak er flashcards van:
 - Meerdere vertalingen voor één woord zet je samen in "back", gescheiden door komma's.
 - Sla kopjes, paginanummers, uitspraaktekens (fonetisch schrift), oefeningen en uitleg over.
 - Staat er een voorbeeldzin met vertaling bij, maak daar dan een aparte kaart van.
+- Sommige bladzijdes hebben ${front} voorbeeldzinnen waarin het te leren woord (of de woordgroep) gekleurd is, bijvoorbeeld oranje, met rechts (achter een vakje) alleen de ${back} vertaling van dat woord. Maak dan per zin één kaart: "front" = alleen het gekleurde woord of de gekleurde woordgroep, precies zoals in de zin (staan de gekleurde woorden niet naast elkaar, zoals "be very lucky" met "be" en "lucky" gekleurd, zet dan alleen de gekleurde woorden achter elkaar: "be lucky"); "back" = de vertaling uit de rechterkolom; "example" = de hele voorbeeldzin, letterlijk overgenomen.
+- Bij gewone woordjes zonder zo'n voorbeeldzin is "example" een lege string.
 - De foto kan scheef of op z'n kant staan; lees hem in de juiste richting.
 - Verzin niets wat niet op de foto staat. Is de foto onleesbaar, geef dan een lege lijst.`;
 
   const parsed = await askClaude({ images: [base64Jpeg], prompt, schema: SCHEMA, apiKey, model });
   return parsed.cards
-    .map((c) => ({ front: c.front.trim(), back: c.back.trim(), ok: true }))
+    .map((c) => ({ front: c.front.trim(), back: c.back.trim(), example: (c.example || '').trim(), ok: true }))
     .filter((c) => c.front && c.back);
 }
 

@@ -1,6 +1,6 @@
 // Gratis tekstherkenning in de browser met Tesseract.js.
 // De taalbestanden worden de eerste keer gedownload en daarna bewaard.
-import { pairsFromLines, pairsFromText } from './parse.js';
+import { pairsFromLines, pairsFromText, pairsFromHighlights, highlightInk } from './parse.js';
 import { toCanvas } from './image.js';
 
 const TESSERACT_URL = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
@@ -56,13 +56,40 @@ async function bestRotation(worker, canvas, onProgress) {
   return best();
 }
 
-export async function ocrPairs(canvas, onProgress = () => {}, { psm = '11', autoRotate = true } = {}) {
+// Welke woorden zijn gekleurd gedrukt (bv. oranje woorden in voorbeeldzinnen)?
+// Daarvoor de kleurenfoto, in dezelfde stand en grootte als wat de OCR las.
+function markHighlights(lines, color) {
+  const W = color.width;
+  const all = color.getContext('2d').getImageData(0, 0, W, color.height).data;
+  for (const line of lines) {
+    for (const w of line.words || []) {
+      const x0 = Math.max(0, w.bbox.x0);
+      const x1 = Math.min(W, w.bbox.x1);
+      const y0 = Math.max(0, w.bbox.y0);
+      const y1 = Math.min(color.height, w.bbox.y1);
+      if (x1 <= x0 || y1 <= y0) continue;
+      const px = new Uint8ClampedArray((x1 - x0) * (y1 - y0) * 4);
+      for (let y = y0; y < y1; y++) px.set(all.subarray((y * W + x0) * 4, (y * W + x1) * 4), (y - y0) * (x1 - x0) * 4);
+      w.hl = highlightInk(px);
+    }
+  }
+}
+
+// canvas: grijze foto voor de OCR; color (optioneel): dezelfde foto in kleur.
+export async function ocrPairs(canvas, onProgress = () => {}, { psm = '11', autoRotate = true, color = null } = {}) {
   progressCb = onProgress;
   const worker = await getWorker();
   await worker.setParameters({ preserve_interword_spaces: '1', tessedit_pageseg_mode: psm });
   const rotation = autoRotate ? await bestRotation(worker, canvas, onProgress) : 0;
   const input = rotation ? toCanvas(canvas, Infinity, { rotate: rotation }) : canvas;
   const { data } = await worker.recognize(input);
-  const rows = data.lines && data.lines.length ? pairsFromLines(data.lines) : pairsFromText(data.text);
+  const lines = data.lines || [];
+  if (color && lines.length) {
+    markHighlights(lines, rotation ? toCanvas(color, Infinity, { rotate: rotation }) : color);
+    // Voorbeeldzinnen met gekleurde woorden? Dan die indeling gebruiken.
+    const rows = pairsFromHighlights(lines);
+    if (rows && rows.filter((r) => r.back).length >= 3) return { rows, text: data.text, rotation };
+  }
+  const rows = lines.length ? pairsFromLines(lines) : pairsFromText(data.text);
   return { rows, text: data.text, rotation };
 }

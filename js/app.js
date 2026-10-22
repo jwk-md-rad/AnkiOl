@@ -2,7 +2,7 @@ import * as db from './db.js';
 import { previewLabels, AGAIN, HARD, GOOD, EASY, formatMs } from './srs.js';
 import { Session, countDue, nextVariant, needsMoreVariants, addVariants } from './session.js';
 import { checkAnswer, normalize, oneLetterOff } from './check.js';
-import { pairsFromText } from './parse.js';
+import { pairsFromText, findInSentence } from './parse.js';
 import { loadImage, toCanvas, canvasToBase64Jpeg, isHeic, isImageFile } from './image.js';
 import { STONE_TYPES } from './claude.js';
 import { GOOGLE_CLIENT_ID } from './config.js';
@@ -238,7 +238,7 @@ async function deckView(deck) {
             ${
               card.kind === 'stone'
                 ? `<td class="stone-cell"><span class="badge">📘 ${esc(STONE_TYPES[card.type])}</span> ${esc(card.front)}</td><td class="stone-cell">${esc(card.back)} <small class="muted">(${card.variants.length} varianten)</small></td>`
-                : `<td><input class="f" value="${esc(card.front)}"></td><td><input class="b" value="${esc(card.back)}"></td>`
+                : `<td><input class="f" value="${esc(card.front)}">${card.example ? `<small class="example muted">${exampleHtml(card.example, card.front)}</small>` : ''}</td><td><input class="b" value="${esc(card.back)}"></td>`
             }
             <td class="muted">${nextLabel(card)}</td>
             <td><button class="icon del" title="Verwijderen">✕</button></td>
@@ -323,6 +323,20 @@ function nextLabel(card) {
 
 // ---------- Kaartjes controleren (gedeeld door foto en plakken) ----------
 
+// Voorbeeldzin met het te leren woord oranje, of (hide) met een gat erin.
+function exampleHtml(sentence, word, hide = false) {
+  const spots = findInSentence(sentence, word);
+  if (hide && !spots.length) return '';
+  let html = '';
+  let pos = 0;
+  for (const [a, b] of spots) {
+    html += esc(sentence.slice(pos, a));
+    html += hide ? '<span class="gap">&nbsp;?&nbsp;</span>' : `<b class="hl">${esc(sentence.slice(a, b))}</b>`;
+    pos = b;
+  }
+  return html + esc(sentence.slice(pos));
+}
+
 function reviewTable(deck, rows, existing) {
   const known = new Set(existing.map((c) => normalize(c.front)));
   for (const r of rows) {
@@ -350,7 +364,7 @@ function reviewTable(deck, rows, existing) {
               (r, i) => `
             <tr data-i="${i}" class="${r.ok ? '' : 'off'}">
               <td><input type="checkbox" class="ok" ${r.ok ? 'checked' : ''}></td>
-              <td><input class="f" value="${esc(r.front)}"></td>
+              <td><input class="f" value="${esc(r.front)}">${r.example ? `<small class="example muted">${exampleHtml(r.example, r.front)}</small>` : ''}</td>
               <td><input class="b" value="${esc(r.back)}">${r.dup ? '<small class="muted">staat er al in</small>' : ''}</td>
               <td><button type="button" class="icon del" title="Weghalen">✕</button></td>
             </tr>`
@@ -394,7 +408,7 @@ function reviewTable(deck, rows, existing) {
       box.querySelector('tbody tr:last-child .f').focus();
     } else if (t.classList.contains('save')) {
       const keep = rows.filter((r) => r.ok && r.front.trim() && r.back.trim());
-      await db.putCards(keep.map((r) => db.makeCard(deck.id, r.front.trim(), r.back.trim())));
+      await db.putCards(keep.map((r) => db.makeCard(deck.id, r.front.trim(), r.back.trim(), r.example)));
       toast(`${keep.length} kaartjes toegevoegd`, 'ok');
       location.hash = `#/deck/${deck.id}`;
     }
@@ -598,10 +612,13 @@ async function photoView(deck, mode = 'words') {
         } else {
           progress.textContent = `${which}Tekstherkenning laden… (de eerste keer kan dit even duren)`;
           const { ocrPairs } = await import('./ocr.js');
-          const res = await ocrPairs(toCanvas(bitmap, 2400, { rotate, crop, grayscale: true }), (m) => {
+          const onProgress = (m) => {
             if (m.status === 'Stand van de foto bepalen') progress.textContent = `${which}Stand van de foto bepalen…`;
             else if (m.status === 'recognizing text') progress.textContent = `${which}Tekst herkennen… ${Math.round(m.progress * 100)}%`;
-          });
+          };
+          // De kleurenversie erbij: om oranje woorden in voorbeeldzinnen te vinden.
+          const color = toCanvas(bitmap, 2400, { rotate, crop });
+          const res = await ocrPairs(toCanvas(bitmap, 2400, { rotate, crop, grayscale: true }), onProgress, { color });
           rows.push(...res.rows);
         }
       }
@@ -861,6 +878,7 @@ async function studyView(deck, cards, { mode, dir, cram, newLeft }) {
     $s.innerHTML = `
       <div class="card-label muted">${esc(LANGS[qLang])} → ${esc(LANGS[aLang])}${isNew ? ' · <span class="c-new">nieuw</span>' : ''}</div>
       <div class="q">${esc(question())} ${speakBtn(question(), qLang)}</div>
+      ${item.card.example ? `<p class="example">${exampleHtml(item.card.example, item.card.front, item.dir !== 'fwd')}${item.dir === 'fwd' ? ` ${speakBtn(item.card.example, deck.frontLang)}` : ''}</p>` : ''}
       ${
         mode === 'type'
           ? `<form id="typeForm" class="type"><input id="typed" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Typ je antwoord (${esc(LANGS[aLang])})"><button class="primary">Controleer</button></form>
@@ -957,6 +975,7 @@ async function studyView(deck, cards, { mode, dir, cram, newLeft }) {
       ${verdict}
       <hr>
       ${isStone() ? stoneAnswerHtml() : `<div class="a">${esc(answerText())} ${speakBtn(answerText(), aLang)}</div>`}
+      ${!isStone() && item.card.example && item.dir !== 'fwd' ? `<p class="example">${exampleHtml(item.card.example, item.card.front)} ${speakBtn(item.card.example, deck.frontLang)}</p>` : ''}
       ${typed !== null ? '<p class="muted center">Enter = voorgestelde knop. Klopt het oordeel niet? Kies zelf.</p>' : '<p class="muted center">Hoe goed wist je het?</p>'}
       <div class="rates">
         ${btn(AGAIN, 'Opnieuw', 'again')}${btn(HARD, 'Moeilijk', 'hard')}${btn(GOOD, 'Goed', 'good')}${btn(EASY, 'Makkelijk', 'easy')}
