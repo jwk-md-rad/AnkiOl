@@ -392,3 +392,34 @@ test('woord terugvinden in de voorbeeldzin', () => {
   assert.deepEqual(findInSentence('He is focusing.', 'focus').map(([a, b]) => 'He is focusing.'.slice(a, b)), ['focusing']);
   assert.deepEqual(findInSentence('Nothing here.', 'brain'), []);
 });
+
+test('synchroniseren: overhoor-instellingen, laatste wijziging wint', async () => {
+  const { mergeData } = await import('../js/merge.js');
+  const deck = { id: 'd1', name: 'H1', updated: 1 };
+  const chromebook = {
+    decks: [deck],
+    cards: [],
+    prefs: {
+      'study:d1': { value: { mode: 'type', dir: 'rev' }, updated: 200 },
+      speak: { value: true, updated: 100 },
+      'new:d1': { value: { day: 'Thu Oct 22 2026', count: 5 }, updated: 150 },
+      'study:weg': { value: { mode: 'flip' }, updated: 300 },
+    },
+  };
+  const iphone = {
+    decks: [deck],
+    cards: [],
+    prefs: {
+      'study:d1': { value: { mode: 'flip', dir: 'fwd' }, updated: 100 },
+      speak: { value: false, updated: 250 },
+      'new:d1': { value: { day: 'Thu Oct 22 2026', count: 8 }, updated: 120 },
+    },
+  };
+  const { prefs } = mergeData(chromebook, iphone);
+  assert.deepEqual(prefs['study:d1'].value, { mode: 'type', dir: 'rev' });
+  assert.equal(prefs.speak.value, false);
+  assert.deepEqual(prefs['new:d1'].value, { day: 'Thu Oct 22 2026', count: 8 });
+  assert.equal(prefs['study:weg'], undefined, 'instelling van een verwijderd hoofdstuk valt weg');
+  // Oude gegevens zonder instellingen blijven werken.
+  assert.deepEqual(mergeData({ decks: [deck], cards: [] }, { decks: [deck], cards: [] }).prefs, {});
+});
