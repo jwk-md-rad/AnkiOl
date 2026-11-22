@@ -500,7 +500,8 @@ async function photoView(deck, mode = 'words') {
       Je schrijft je antwoord op papier en kijkt daarna zelf na.</p>
       ${apiKey ? '' : '<p class="panel error">Hiervoor is Claude nodig. Vul eerst een API-sleutel in bij <a href="#/settings">⚙ Instellingen</a>.</p>'}`
           : `<h2>Foto → kaartjes</h2>
-      <p class="muted">Maak een scherpe, rechte foto van de woordjes in je boek. Meer pagina's? Kies meerdere foto's.</p>`
+      <p class="muted">Maak een scherpe, rechte foto van de woordjes in je boek. Meer pagina's? Kies meerdere foto's. ${esc(modelName(model))} leest de foto en maakt de kaartjes.</p>
+      ${apiKey ? '' : '<p class="panel error">Hiervoor is Claude nodig. Vul eerst een API-sleutel in bij <a href="#/settings">⚙ Instellingen</a>.</p>'}`
       }
       <div class="row">
         <label class="button big primary">🖼 Foto kiezen<input id="file" type="file" accept="image/*,.heic,.heif" multiple hidden></label>
@@ -521,13 +522,7 @@ async function photoView(deck, mode = 'words') {
       <div id="preview" hidden>
         <div id="thumbs" class="thumbs"></div>
         <div class="row">
-          <label ${stoneMode ? 'hidden' : ''}>Herkennen met
-            <select id="method">
-              <option value="claude" ${apiKey ? 'selected' : 'disabled'}>${modelName(model)}${apiKey ? '' : ' – stel eerst een API-sleutel in'}</option>
-              <option value="ocr" ${apiKey ? '' : 'selected'}>Gratis tekstherkenning (OCR)</option>
-            </select>
-          </label>
-          <button id="run" class="primary big" ${stoneMode && !apiKey ? 'disabled' : ''}>${stoneMode ? 'Maak oefeningen' : 'Maak kaartjes'}</button>
+          <button id="run" class="primary big" ${apiKey ? '' : 'disabled'}>${stoneMode ? 'Maak oefeningen' : 'Maak kaartjes'}</button>
         </div>
         <div id="progress" class="muted"></div>
       </div>
@@ -621,7 +616,6 @@ async function photoView(deck, mode = 'words') {
   };
   document.getElementById('run').onclick = async (e) => {
     const btn = e.target;
-    const method = document.getElementById('method').value;
     btn.disabled = true;
     document.getElementById('review').innerHTML = '';
     if (stoneMode) {
@@ -646,26 +640,12 @@ async function photoView(deck, mode = 'words') {
       for (let i = 0; i < photos.length; i++) {
         const { bitmap, rotate, crop } = photos[i];
         const which = photos.length > 1 ? `Foto ${i + 1} van ${photos.length}: ` : '';
-        if (method === 'claude') {
-          progress.textContent = `${which}Claude leest de foto… (duurt ongeveer 10–30 seconden)`;
-          const { claudePairs } = await import('./claude.js');
-          const jpeg = canvasToBase64Jpeg(toCanvas(bitmap, 1800, { rotate, crop }));
-          rows.push(...(await claudePairs(jpeg, apiKey, { frontLang: deck.frontLang, backLang: deck.backLang, model })));
-        } else {
-          progress.textContent = `${which}Tekstherkenning laden… (de eerste keer kan dit even duren)`;
-          const { ocrPairs } = await import('./ocr.js');
-          const onProgress = (m) => {
-            if (m.status === 'Stand van de foto bepalen') progress.textContent = `${which}Stand van de foto bepalen…`;
-            else if (m.status === 'recognizing text') progress.textContent = `${which}Tekst herkennen… ${Math.round(m.progress * 100)}%`;
-          };
-          // De kleurenversie erbij: om oranje woorden in voorbeeldzinnen te vinden.
-          const color = toCanvas(bitmap, 2400, { rotate, crop });
-          const res = await ocrPairs(toCanvas(bitmap, 2400, { rotate, crop, grayscale: true }), onProgress, { color });
-          rows.push(...res.rows);
-        }
+        progress.textContent = `${which}Claude leest de foto… (duurt ongeveer 10–30 seconden)`;
+        const { claudePairs } = await import('./claude.js');
+        const jpeg = canvasToBase64Jpeg(toCanvas(bitmap, 1800, { rotate, crop }));
+        rows.push(...(await claudePairs(jpeg, apiKey, { frontLang: deck.frontLang, backLang: deck.backLang, model })));
       }
-      const tip = method === 'ocr' ? ' Veel fouten? Snij alleen de woordjes uit (✂) of gebruik Claude AI.' : '';
-      progress.textContent = rows.length ? `${rows.length} regels gevonden.${tip}` : `Geen woordjes gevonden. Probeer een scherpere of rechtere foto.${tip}`;
+      progress.textContent = rows.length ? `${rows.length} regels gevonden.` : 'Geen woordjes gevonden. Probeer een scherpere of rechtere foto.';
       if (rows.length) document.getElementById('review').appendChild(reviewTable(deck, rows, existing));
     } catch (err) {
       console.error(err);
@@ -1255,8 +1235,8 @@ async function settingsView() {
             ${CLAUDE_MODELS.map((m) => `<option value="${m.id}" ${m.id === s.model ? 'selected' : ''}>${m.name} – ${m.note}</option>`).join('')}
           </select>
         </label>
-        <p class="muted small">Optioneel. Zonder sleutel gebruikt de app gratis tekstherkenning. Met een sleutel leest Claude de foto en maakt nettere kaartjes
-        (kost een paar cent per foto). Een sleutel maak je op <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>.
+        <p class="muted small">Nodig voor <i>Foto → kaartjes</i> en <i>Stone → oefeningen</i>: Claude leest de foto (kost een paar cent per foto).
+        Woordjes typen of plakken en overhoren werkt ook zonder sleutel. Een sleutel maak je op <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>.
         De sleutel wordt alleen op dit apparaat bewaard (ook bij synchroniseren) en gaat rechtstreeks naar Anthropic.</p>
         <button class="primary">Opslaan</button>
       </form>

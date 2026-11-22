@@ -1,4 +1,4 @@
-// Foto inlezen, verkleinen en eventueel grijs maken.
+// Foto inlezen (ook iPhone-foto's), draaien, uitsnijden en verkleinen.
 
 // iPhones bewaren foto's als HEIC; Chrome kan dat niet zelf openen.
 // libheif kan ook de nieuwste iPhone-foto's aan; heic2any is de reserve.
@@ -72,7 +72,7 @@ export async function loadImage(file) {
 
 // Foto draaien, eventueel uitsnijden (crop: x, y, w, h als fractie 0–1 van
 // de gedraaide foto) en verkleinen tot maxSide pixels.
-export function toCanvas(bitmap, maxSide, { grayscale = false, rotate = 0, crop = null } = {}) {
+export function toCanvas(bitmap, maxSide, { rotate = 0, crop = null } = {}) {
   const W = bitmap.width;
   const H = bitmap.height;
   const swap = rotate % 180 !== 0;
@@ -94,19 +94,6 @@ export function toCanvas(bitmap, maxSide, { grayscale = false, rotate = 0, crop 
   const turn = { 0: [1, 0, 0, 1, 0, 0], 90: [0, 1, -1, 0, H, 0], 180: [-1, 0, 0, -1, W, H], 270: [0, -1, 1, 0, 0, W] };
   ctx.transform(...turn[((rotate % 360) + 360) % 360]);
   ctx.drawImage(bitmap, 0, 0, W, H);
-  if (grayscale) {
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const d = img.data;
-    for (let i = 0; i < d.length; i += 4) {
-      // Donkerste kleurkanaal: zwarte én gekleurde tekst (oranje, blauw) worden
-      // donker, wit/beige papier blijft licht. Gewone grijswaarden maken oranje
-      // tekst op beige papier bijna onzichtbaar.
-      const v = Math.min(d[i], d[i + 1], d[i + 2]);
-      d[i] = d[i + 1] = d[i + 2] = v;
-    }
-    ctx.putImageData(img, 0, 0);
-  }
   return canvas;
 }
 

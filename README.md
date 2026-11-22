@@ -2,12 +2,10 @@
 
 Een AnkiWeb-achtige app om woordjes en zinnen te overhoren (Engels ↔ Nederlands, ook Frans/Duits mogelijk), gemaakt voor de **Chromebook** en ook te gebruiken op de **iPhone**, met synchronisatie tussen apparaten (via GitHub of Google Drive).
 
-- **Foto → kaartjes**: maak een foto van de woordenlijst in je leerboek (of kies een bestaande foto) en de app maakt de kaartjes. Daarna controleer en verbeter je ze voordat ze worden opgeslagen.
-  - *Gratis tekstherkenning* (Tesseract OCR, in de browser): herkent kolommen zoals `the teacher    de leraar` of `house - huis`.
-  - *Claude AI* (optioneel, met eigen Anthropic API-sleutel): beter in lastige layouts, voorbeeldzinnen, fonetisch schrift weglaten en EN/NL automatisch op de goede kant zetten.
-  - **Voorbeeldzinnen met oranje woorden** (Engelse zin met het te leren woord in het oranje, rechts de vertaling achter een vakje): beide manieren herkennen dit. De gratis OCR kijkt naar de kleur van de letters. Kaartje = oranje woord ↔ vertaling, met de zin erbij. Bij Engels → Nederlands zie je de zin met het woord in het oranje; bij Nederlands → Engels staat er een gat in de zin als hint.
+- **Foto → kaartjes**: maak een foto van de woordenlijst in je leerboek (of kies een bestaande foto) en Claude AI maakt de kaartjes (met eigen Anthropic API-sleutel, zie hieronder). Claude kan lastige layouts aan, laat fonetisch schrift weg en zet EN/NL automatisch op de goede kant. Daarna controleer en verbeter je de kaartjes voordat ze worden opgeslagen. Zonder sleutel kun je woordjes typen of plakken.
+  - **Voorbeeldzinnen met oranje woorden** (Engelse zin met het te leren woord in het oranje, rechts de vertaling achter een vakje): kaartje = oranje woord ↔ vertaling, met de zin erbij. Bij Engels → Nederlands zie je de zin met het woord in het oranje; bij Nederlands → Engels staat er een gat in de zin als hint.
 - Woordjes per **hoofdstuk** (bijvoorbeeld *Engels H4*), zoals in het leerboek.
-- Binnen een hoofdstuk onthoudt de app uit welk **deel** van het boek een woord komt (bijvoorbeeld *B Groceries*, *D Flavours*, *A Watching*). Claude leest de kopjes van de foto; de gratis tekstherkenning herkent kopjes met een letter ervoor. In het controlescherm vul je een deel in of verbeter je het. Bij *Overhoren* vink je aan welke delen je wilt oefenen; die keuze wordt onthouden.
+- Binnen een hoofdstuk onthoudt de app uit welk **deel** van het boek een woord komt (bijvoorbeeld *B Groceries*, *D Flavours*, *A Watching*). Claude leest de kopjes van de foto. In het controlescherm vul je een deel in of verbeter je het. Bij *Overhoren* vink je aan welke delen je wilt oefenen; die keuze wordt onthouden.
 - **Stones** (zinsbouw-schema's uit Stepping Stones): foto uploaden → Claude verzint oefenzinnen (Nederlands → Engels vertalen, vraag beantwoorden, gatenzin) met steeds andere namen, datums en woorden. Antwoord op papier schrijven, omdraaien, zelf nakijken. Elke herhaling een andere variant; zijn alle zinnen van een oefening geweest, dan maakt Claude op de achtergrond nieuwe (± 0,5–1 cent per keer, alleen online). Met *🔄 Nieuwe Stone-zinnen* in een hoofdstuk maak je zelf een verse ronde. Vereist een Claude API-sleutel (schatting: ± 10–25 cent per Stone met Opus, ± 5–12 met Sonnet).
 - **Spaced repetition** zoals Anki (SM-2): nieuwe woordjes komen terug na 1 en 10 minuten, daarna na 1 dag, en steeds langere tijd zolang je ze goed weet, tot maximaal 6 dagen: elk woordje komt dus minstens eens per 6 dagen terug. Fout = vaker oefenen.
 - **Per sessie kiezen**: *omdraaien en zelf beoordelen* (Opnieuw / Moeilijk / Goed / Makkelijk) of *antwoord intypen* (tolerant voor hoofdletters, accenten, lidwoorden en kleine typfouten; Engelse samentrekkingen tellen als hetzelfde: *it's* = *it is*, *don't* = *do not*, *can't* = *cannot*, …).
@@ -35,7 +33,7 @@ De app is een gewone website zonder server-onderdelen. Zet hem online met **GitH
 
 Lokaal uitproberen: `npm start` en open <http://localhost:8080>.
 
-## Claude AI instellen (optioneel)
+## Claude AI instellen (nodig voor foto's en Stones)
 
 1. Maak een API-sleutel op <https://console.anthropic.com/settings/keys> en zet er wat tegoed op.
 2. Open in de app ⚙ *Instellingen* en plak de sleutel.
@@ -104,8 +102,7 @@ js/app.js      schermen en navigatie
 js/srs.js      spaced-repetition-algoritme (SM-2, Anki-stijl)
 js/session.js  volgorde van kaarten in een sessie
 js/check.js    controle van ingetypte antwoorden
-js/parse.js    tekst/OCR-regels → woordparen
-js/ocr.js      Tesseract.js (gratis OCR)
+js/parse.js    getypte/geplakte tekst → woordparen
 js/claude.js   Claude API (foto → kaartjes, Stones)
 js/gistsync.js synchroniseren via GitHub (gist)
 js/sync.js     synchroniseren via Google Drive
