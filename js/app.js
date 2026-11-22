@@ -68,6 +68,9 @@ function speak(text, lang) {
   speechSynthesis.speak(u);
 }
 
+// Zoveel nieuwe woordjes extra per tik op "Extra", als het aantal voor vandaag op is.
+const EXTRA_NEW = 10;
+
 // Hoeveel nieuwe kaarten er vandaag nog geleerd mogen worden (per hoofdstuk).
 async function newLeftToday(deckId, perDay) {
   const today = new Date().toDateString();
@@ -868,15 +871,27 @@ async function studySetupView(deck) {
     document.getElementById('secAll').onclick = () => setAll(true);
     document.getElementById('secNone').onclick = () => setAll(false);
   }
+  // Extra nieuwe woordjes bovenop het aantal per dag (alleen voor deze keer).
+  let extra = 0;
   const update = () => {
     const cards = chosen();
     const c = countDue(cards, DIRS[form.dir.value]);
-    const fresh = Math.min(c.fresh, newLeft);
+    const fresh = Math.min(c.fresh, newLeft + extra);
+    const more = Math.min(EXTRA_NEW, c.fresh - fresh);
     document.getElementById('summary').innerHTML = form.cram.checked
       ? `Toetsmodus: alle ${cards.length} woordjes komen langs. Je planning wordt niet aangepast.`
-      : `Vandaag: <span class="c-new">${fresh} nieuw</span> · <span class="c-learn">${c.learn} aan het leren</span> · <span class="c-review">${c.review} herhalen</span>` +
-        (c.fresh > fresh ? ` <br><small>Nieuwe woordjes per dag: ${newPerDay} (aan te passen bij Instellingen).</small>` : '');
+      : `Vandaag: <span class="c-new">${fresh} nieuw${extra ? ` (waarvan ${fresh - Math.min(c.fresh, newLeft)} extra)` : ''}</span> · <span class="c-learn">${c.learn} aan het leren</span> · <span class="c-review">${c.review} herhalen</span>` +
+        (more > 0
+          ? `<br><small>${newLeft ? `Nieuwe woordjes per dag: ${newPerDay}.` : `De ${newPerDay} nieuwe woordjes van vandaag heb je al gehad.`} Zin in meer?</small>
+             <br><button type="button" id="extraBtn" class="extra-btn">➕ Extra: nog ${more} nieuwe woordjes</button>`
+          : '');
   };
+  document.getElementById('summary').addEventListener('click', (e) => {
+    if (e.target.id !== 'extraBtn') return;
+    const c = countDue(chosen(), DIRS[form.dir.value]);
+    extra += Math.min(EXTRA_NEW, c.fresh - Math.min(c.fresh, newLeft + extra));
+    update();
+  });
   form.onchange = update;
   update();
   form.onsubmit = async (e) => {
@@ -885,7 +900,7 @@ async function studySetupView(deck) {
     if (!picked.length) return toast('Kies minstens één deel.', 'bad');
     const opts = { mode: form.mode.value, dir: form.dir.value, skip: secBoxes.filter((b) => !b.checked).map((b) => b.value) };
     await db.setMeta(`study:${deck.id}`, opts);
-    studyView(deck, picked, { ...opts, cram: form.cram.checked, newLeft });
+    studyView(deck, picked, { ...opts, cram: form.cram.checked, newLeft: newLeft + extra });
   };
 }
 
@@ -1086,6 +1101,8 @@ async function studyView(deck, cards, { mode, dir, cram, newLeft }) {
   }
 
   function done() {
+    // Nog nieuwe woordjes over? Dan kan er een extra rondje bij (los van het aantal per dag).
+    const more = cram ? 0 : Math.min(EXTRA_NEW, countDue(cards, dirs).fresh);
     const left = session.items.filter(({ card, dir: d }) => card[d].state !== 'review');
     const soon = left.length ? Math.min(...left.map(({ card, dir: d }) => card[d].due)) - Date.now() : 0;
     const pct = session.stats.answered ? Math.round((1 - session.stats.again / session.stats.answered) * 100) : 0;
@@ -1095,8 +1112,16 @@ async function studyView(deck, cards, { mode, dir, cram, newLeft }) {
         <h2>Klaar voor nu!</h2>
         <p>${session.stats.answered} kaartjes beantwoord${session.stats.answered ? `, ${pct}% in één keer goed` : ''}.</p>
         ${left.length ? `<p class="muted">Nog ${left.length} kaartjes aan het leren; kom over ongeveer ${formatMs(soon)} terug.</p>` : '<p class="muted">Alles gedaan voor vandaag. Kom morgen terug voor de herhalingen!</p>'}
+        ${more ? `<p><button id="extraRound" class="extra-btn">➕ Extra: nog ${more} nieuwe woordjes</button></p>` : ''}
         <div class="row center"><a class="button primary" href="#/deck/${deck.id}">Terug naar hoofdstuk</a><a class="button" href="#/">Alle hoofdstukken</a></div>
       </div>`;
+    const extraBtn = document.getElementById('extraRound');
+    if (extraBtn) {
+      extraBtn.onclick = () => {
+        cleanup();
+        studyView(deck, cards, { mode, dir, cram: false, newLeft: more });
+      };
+    }
   }
 
   $s.addEventListener('click', (e) => {

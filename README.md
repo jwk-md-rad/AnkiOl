@@ -10,6 +10,7 @@ Een AnkiWeb-achtige app om woordjes en zinnen te overhoren (Engels ↔ Nederland
 - **Spaced repetition** zoals Anki (SM-2): nieuwe woordjes komen terug na 1 en 10 minuten, daarna na 1 dag, en steeds langere tijd zolang je ze goed weet, tot maximaal 6 dagen: elk woordje komt dus minstens eens per 6 dagen terug. Fout = vaker oefenen.
 - **Per sessie kiezen**: *omdraaien en zelf beoordelen* (Opnieuw / Moeilijk / Goed / Makkelijk) of *antwoord intypen* (tolerant voor hoofdletters, accenten, lidwoorden en kleine typfouten; Engelse samentrekkingen tellen als hetzelfde: *it's* = *it is*, *don't* = *do not*, *can't* = *cannot*, …).
 - Richting kiezen: Engels → Nederlands, Nederlands → Engels of beide (elke richting heeft een eigen planning).
+- **Extra nieuwe woordjes**: is het aantal nieuwe woordjes voor vandaag op, dan kun je met *➕ Extra: nog 10 nieuwe woordjes* (bij Overhoren en op het Klaar-scherm) toch verder, zonder de instelling te veranderen.
 - *Alles oefenen* (toetsmodus): alle woordjes van een hoofdstuk langs, zonder de planning te verstoren.
 - Voorlezen van Engelse woorden (spraak van Chrome).
 - **Aanmoedigingen**: om de 6 tot 14 kaartjes (willekeurig) een kort geanimeerd "gifje" met *Lekker bezig!*, *Ga zo door!* enz. Zelfgemaakte animaties, dus ook offline; uit te zetten bij Instellingen.

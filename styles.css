@@ -315,3 +315,6 @@ tr.sec-head th { padding-top: 14px; font-size: 0.95rem; color: var(--text); bord
 input.s { min-width: 7em; }
 .sections .row { gap: 12px; }
 tr.sec-head .delsec { float: right; font-weight: normal; font-size: 0.85rem; }
+
+/* Extra nieuwe woordjes als het aantal voor vandaag op is */
+.extra-btn { margin-top: 8px; border: 2px dashed var(--primary); color: var(--primary); background: transparent; font-weight: 600; }
