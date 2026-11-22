@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Woordjes – brochure</title>
+<!-- Brochure van de app. PDF maken: deze pagina in Chromium printen naar A4 (zie README). -->
+<style>
+@font-face { font-family: Fredoka; font-weight: 500; src: url(fonts/fredoka-latin-500-normal.woff2); }
+@font-face { font-family: Fredoka; font-weight: 600; src: url(fonts/fredoka-latin-600-normal.woff2); }
+@font-face { font-family: Fredoka; font-weight: 700; src: url(fonts/fredoka-latin-700-normal.woff2); }
+@font-face { font-family: Nunito; font-weight: 400; src: url(fonts/nunito-latin-400-normal.woff2); }
+@font-face { font-family: Nunito; font-weight: 600; src: url(fonts/nunito-latin-600-normal.woff2); }
+@font-face { font-family: Nunito; font-weight: 700; src: url(fonts/nunito-latin-700-normal.woff2); }
+@font-face { font-family: Nunito; font-weight: 800; src: url(fonts/nunito-latin-800-normal.woff2); }
+
+:root {
+  --ink: #1b2236;
+  --soft: #5b6478;
+  --blue: #2f6fde;
+  --blue-d: #1f4fb0;
+  --orange: #e8772e;
+  --orange-l: #fff1e6;
+  --cream: #fbf8f3;
+  --line: #e7e2d8;
+}
+@page { size: A4; margin: 0; }
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body { font-family: Nunito, sans-serif; color: var(--ink); background: #8a8f9c; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.page { width: 210mm; height: 297mm; position: relative; overflow: hidden; page-break-after: always; background: var(--cream); margin: 0 auto; }
+.page:last-child { page-break-after: auto; }
+@media screen { .page { margin: 8mm auto; box-shadow: 0 4mm 12mm rgba(0, 0, 0, 0.25); } }
+h1, h2, h3 { font-family: Fredoka, sans-serif; margin: 0; letter-spacing: -0.01em; }
+p { margin: 0; line-height: 1.5; }
+.hl { color: var(--orange); }
+
+/* telefoon-mockup */
+.phone { width: 62mm; border-radius: 9mm; background: #0f1422; padding: 2.4mm; box-shadow: 0 6mm 14mm rgba(15, 20, 34, 0.28), 0 1mm 3mm rgba(15, 20, 34, 0.2); position: relative; }
+.phone img { display: block; width: 100%; border-radius: 6.8mm; }
+.phone::before { content: ''; position: absolute; top: 3.6mm; left: 50%; width: 15mm; height: 3.6mm; transform: translateX(-50%); background: #0f1422; border-radius: 2mm; z-index: 2; }
+.phone.sm { width: 46mm; border-radius: 7mm; padding: 1.9mm; }
+.phone.sm img { border-radius: 5.2mm; }
+.phone.sm::before { top: 2.8mm; width: 11mm; height: 2.8mm; }
+.phone.crop img { object-fit: cover; object-position: top; }
+
+/* ---------- pagina 1: voorkant ---------- */
+.cover { background: radial-gradient(120% 70% at 85% 0%, #ffd9bd 0%, rgba(255, 217, 189, 0) 55%), linear-gradient(160deg, #2f6fde 0%, #1d3f9c 70%, #172f73 100%); color: white; }
+.cover .blob { position: absolute; border-radius: 50%; }
+.cover .b1 { width: 120mm; height: 120mm; right: -40mm; bottom: -30mm; background: rgba(232, 119, 46, 0.9); }
+.cover .b2 { width: 50mm; height: 50mm; left: -18mm; top: 140mm; background: rgba(255, 255, 255, 0.08); }
+.cover .b3 { width: 22mm; height: 22mm; left: 70mm; top: 30mm; background: rgba(255, 255, 255, 0.1); }
+.brand { position: absolute; left: 18mm; top: 16mm; display: flex; align-items: center; gap: 3mm; font-family: Fredoka; font-weight: 600; font-size: 15pt; }
+.brand .logo { width: 10mm; height: 10mm; border-radius: 2.6mm; background: white; color: var(--blue); display: grid; place-items: center; font-size: 11pt; font-weight: 700; }
+.cover h1 { position: absolute; left: 18mm; top: 38mm; width: 180mm; font-size: 42pt; line-height: 1.02; font-weight: 700; }
+.cover h1 .hl { color: #ffb37d; }
+.cover .lead { position: absolute; left: 18mm; top: 82mm; width: 100mm; font-size: 13pt; line-height: 1.5; color: rgba(255, 255, 255, 0.9); }
+.cover .chips { position: absolute; left: 18mm; top: 132mm; display: flex; flex-direction: column; gap: 3mm; }
+.chip { display: inline-flex; align-items: center; gap: 2.5mm; background: rgba(255, 255, 255, 0.13); border: 0.3mm solid rgba(255, 255, 255, 0.25); padding: 2.2mm 4.5mm 2.2mm 3mm; border-radius: 20mm; font-weight: 700; font-size: 11pt; width: fit-content; }
+.chip i { font-style: normal; color: var(--blue); font-weight: 800; width: 7mm; height: 7mm; border-radius: 50%; background: white; display: grid; place-items: center; font-size: 10pt; }
+.cover .p1 { position: absolute; right: 14mm; top: 84mm; width: 72mm; border-radius: 10mm; transform: rotate(5deg); z-index: 3; }
+.cover .tag { position: absolute; z-index: 4; background: white; color: var(--ink); border-radius: 4mm; padding: 2.5mm 4mm; font-weight: 800; font-size: 10pt; box-shadow: 0 3mm 8mm rgba(0, 0, 0, 0.2); }
+.cover .tag small { display: block; font-weight: 600; color: var(--soft); font-size: 8.5pt; }
+.cover .t1 { right: 64mm; top: 196mm; transform: rotate(-4deg); }
+.cover .t2 { right: 10mm; top: 226mm; transform: rotate(4deg); }
+.cover .foot { position: absolute; left: 18mm; bottom: 14mm; font-size: 10pt; color: rgba(255, 255, 255, 0.75); }
+
+/* ---------- binnenpagina's ---------- */
+.inner { padding: 18mm 18mm 0; }
+.kicker { font-family: Fredoka; font-weight: 600; color: var(--orange); text-transform: uppercase; letter-spacing: 0.12em; font-size: 10pt; }
+.inner h2 { font-size: 28pt; line-height: 1.1; margin-top: 2mm; font-weight: 700; }
+.inner .intro { margin-top: 4mm; font-size: 11.5pt; color: var(--soft); max-width: 150mm; }
+.pageno { position: absolute; bottom: 7mm; right: 18mm; font-size: 9pt; color: var(--soft); }
+.pageno b { color: var(--blue); }
+
+.steps { margin-top: 8mm; display: grid; gap: 6mm; }
+.step { display: grid; grid-template-columns: 14mm 1fr; gap: 5mm; align-items: start; }
+.num { width: 14mm; height: 14mm; border-radius: 4mm; background: var(--blue); color: white; font-family: Fredoka; font-weight: 700; font-size: 17pt; display: grid; place-items: center; box-shadow: 0 2mm 5mm rgba(47, 111, 222, 0.35); }
+.step.o .num { background: var(--orange); box-shadow: 0 2mm 5mm rgba(232, 119, 46, 0.35); }
+.step h3 { font-size: 15pt; font-weight: 600; margin-top: 0.6mm; }
+.step p { font-size: 10.5pt; color: var(--soft); margin-top: 1.2mm; }
+.shot { margin-top: 3.5mm; border-radius: 3mm; overflow: hidden; border: 0.3mm solid var(--line); box-shadow: 0 2.5mm 7mm rgba(27, 34, 54, 0.1); background: white; }
+.shot img { display: block; width: 100%; }
+
+.orange-box { margin-top: 8mm; background: white; border-radius: 5mm; padding: 6mm; display: grid; grid-template-columns: 1fr 46mm; gap: 6mm; align-items: center; border: 0.4mm solid #f6d2b6; position: relative; }
+.orange-box h3 { font-size: 14pt; font-weight: 600; }
+.orange-box p { font-size: 10pt; color: var(--soft); margin-top: 1.5mm; }
+.book-line { margin-top: 3.5mm; font-size: 10.5pt; background: var(--cream); border-radius: 2.5mm; padding: 3mm 3.5mm; display: flex; justify-content: space-between; gap: 4mm; }
+.book-line b { color: var(--orange); }
+.book-line span:last-child { color: var(--soft); white-space: nowrap; }
+
+.features { margin-top: 6mm; display: grid; grid-template-columns: 1fr 1fr; gap: 4.5mm; }
+.feat { background: white; border-radius: 5mm; padding: 4.5mm 5mm; border: 0.3mm solid var(--line); position: relative; overflow: hidden; }
+.feat .ico { width: 11mm; height: 11mm; border-radius: 3mm; display: grid; place-items: center; font-size: 15pt; background: #eaf1ff; }
+.feat.o .ico { background: var(--orange-l); }
+.feat.g .ico { background: #e7f6ec; }
+.feat h3 { font-size: 13pt; font-weight: 600; margin-top: 3mm; }
+.feat p { font-size: 9.6pt; color: var(--soft); margin-top: 1.3mm; }
+.feat.wide { grid-column: span 2; display: grid; grid-template-columns: 1fr 46mm 46mm; gap: 5mm; align-items: center; }
+.feat.split { display: grid; grid-template-columns: 1fr 34mm; gap: 4mm; align-items: center; }
+.feat.split img { width: 100%; border-radius: 2.5mm; border: 0.3mm solid var(--line); }
+.srs { display: flex; gap: 2mm; margin-top: 3.5mm; align-items: center; flex-wrap: wrap; }
+.srs span { background: #eaf1ff; color: var(--blue-d); font-weight: 800; font-size: 8.8pt; padding: 1.2mm 2.6mm; border-radius: 10mm; }
+.srs span.max { background: var(--orange-l); color: #b4561a; }
+.srs em { color: var(--soft); font-style: normal; font-size: 9pt; }
+
+.cta { margin-top: 8mm; background: linear-gradient(140deg, #2f6fde, #1d3f9c); color: white; border-radius: 6mm; padding: 8mm; display: grid; grid-template-columns: 1fr 42mm; gap: 8mm; align-items: center; position: relative; overflow: hidden; }
+.cta::after { content: ''; position: absolute; width: 60mm; height: 60mm; border-radius: 50%; background: rgba(232, 119, 46, 0.85); right: -28mm; bottom: -36mm; }
+.cta h3 { font-size: 19pt; font-weight: 600; }
+.cta .url { margin-top: 3mm; font-family: Fredoka; font-weight: 600; font-size: 14pt; background: rgba(255, 255, 255, 0.14); border-radius: 3mm; padding: 2.5mm 4mm; display: inline-block; }
+.cta ol { margin: 4mm 0 0; padding-left: 5mm; font-size: 10.5pt; line-height: 1.6; color: rgba(255, 255, 255, 0.92); }
+.cta .qr { background: white; border-radius: 4mm; padding: 3mm; position: relative; z-index: 2; }
+.cta .qr img { display: block; width: 100%; }
+.cta .qr small { display: block; text-align: center; color: var(--ink); font-weight: 700; font-size: 8pt; margin-top: 1mm; }
+
+.prices { margin-top: 7mm; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5mm; }
+.price { background: white; border-radius: 5mm; padding: 5mm; border: 0.3mm solid var(--line); }
+.price.best { border: 0.6mm solid var(--blue); }
+.price .what { font-weight: 800; font-size: 10.5pt; }
+.price .what span { font-weight: 600; color: var(--soft); }
+.price .amount { font-family: Fredoka; font-weight: 700; font-size: 22pt; margin-top: 1.5mm; color: var(--blue); }
+.price.o .amount { color: var(--orange); }
+.price .amount small { font-size: 10pt; color: var(--soft); font-weight: 500; }
+.price p { font-size: 9.2pt; color: var(--soft); margin-top: 1.5mm; }
+.price ul { margin: 2.5mm 0 0; padding-left: 4.5mm; font-size: 9.2pt; line-height: 1.5; }
+
+.faq { margin-top: 7mm; display: grid; grid-template-columns: 1fr 1fr; gap: 4.5mm 7mm; }
+.faq h4 { margin: 0; font-size: 10.5pt; font-weight: 800; }
+.faq p { font-size: 9.4pt; color: var(--soft); margin-top: 1mm; }
+.closing { position: absolute; left: 18mm; right: 18mm; bottom: 14mm; display: flex; justify-content: space-between; align-items: center; border-top: 0.3mm solid var(--line); padding-top: 4mm; font-size: 9.5pt; color: var(--soft); }
+.closing b { font-family: Fredoka; font-size: 13pt; color: var(--ink); font-weight: 600; }
+</style>
+</head>
+<body>
+
+<!-- ============ 1. VOORKANT ============ -->
+<section class="page cover">
+  <div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div>
+  <div class="brand"><div class="logo">Aa</div>Woordjes</div>
+  <h1>Foto van je boek.<br><span class="hl">Woordjes</span> in je hoofd.</h1>
+  <p class="lead">Maak een foto van de woordenlijst, en Claude AI maakt er overhoorkaartjes van. Daarna overhoort de app je precies op het moment dat je een woord bijna vergeten bent. Zo leer je in minder tijd meer woordjes.</p>
+  <div class="chips">
+    <span class="chip"><i>📸</i>Foto → kaartjes in één keer</span>
+    <span class="chip"><i>🧠</i>Slim herhalen (spaced repetition)</span>
+    <span class="chip"><i>✓</i>Per deel oefenen: B Groceries, D Flavours…</span>
+    <span class="chip"><i>💻</i>Chromebook én iPhone, ook offline</span>
+  </div>
+  <div class="phone p1"><img src="img/a-fwd.png" alt=""></div>
+  <div class="tag t1">✓ Goed!<small>volgende keer: over 4 dagen</small></div>
+  <div class="tag t2">🎉 Lekker bezig!<small>Al 12 kaartjes</small></div>
+  <div class="foot">Engels · Frans · Duits ↔ Nederlands &nbsp;·&nbsp; gemaakt voor de brugklas en verder</div>
+</section>
+
+<!-- ============ 2. ZO WERKT HET ============ -->
+<section class="page">
+  <div class="inner">
+    <div class="kicker">Zo werkt het</div>
+    <h2>Van bladzijde naar <span class="hl">overhoren</span> in 3 stappen</h2>
+    <p class="intro">Geen lijsten overtikken. Je maakt een foto van de woordjes in je leerboek, en een minuut later ben je al aan het oefenen.</p>
+
+    <div class="steps">
+      <div class="step">
+        <div class="num">1</div>
+        <div>
+          <h3>Maak een foto van de bladzijde</h3>
+          <p>Met de Chromebook-camera of met je iPhone (ook een HEIC-foto, meerdere tegelijk). Scheef of op z'n kant is geen probleem.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="num">2</div>
+        <div>
+          <h3>Claude leest de woordjes, jij controleert</h3>
+          <p>Claude AI leest de foto in 10–30 seconden: woord, vertaling en uit welk <b>deel</b> van het boek het komt. Je ziet alle kaartjes in een lijst. Vink uit wat je niet wilt leren en verbeter een foutje.</p>
+          <div class="shot"><img src="img/review-top.png" alt=""></div>
+        </div>
+      </div>
+      <div class="step o">
+        <div class="num">3</div>
+        <div>
+          <h3>Overhoren: omdraaien of intypen</h3>
+          <p>Per keer kies je: kaartje omdraaien en zelf beoordelen, of het antwoord intypen. Engels → Nederlands, andersom of allebei. En welke delen je wilt oefenen.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="orange-box">
+      <div>
+        <h3>Snapt ook de <span class="hl">oranje woorden</span> in voorbeeldzinnen</h3>
+        <p>Veel leerboeken leren woorden in een zin, met het nieuwe woord in het oranje en rechts de vertaling. De app maakt per oranje woord een kaartje, met de zin erbij als geheugensteun.</p>
+        <div class="book-line"><span>My aunt makes the best <b>strawberry</b> jam.</span><span>☐ aardbei</span></div>
+        <p style="margin-top:2.5mm">Andersom (Nederlands → Engels) staat er een gat in de zin als hint.</p>
+      </div>
+      <div class="phone sm crop"><img src="img/a-fwd.png" alt="" style="height: 64mm;"></div>
+    </div>
+  </div>
+  <div class="pageno"><b>Woordjes</b> · 2</div>
+</section>
+
+<!-- ============ 3. SLIM LEREN ============ -->
+<section class="page">
+  <div class="inner">
+    <div class="kicker">Slim leren</div>
+    <h2>Minder stampen, <span class="hl">langer onthouden</span></h2>
+    <p class="intro">Gemaakt voor pubers die liever iets anders doen: korte sessies, weinig tekst, duidelijke knoppen en af en toe een feestje: "Lekker bezig!"</p>
+
+    <div class="features">
+      <div class="feat">
+        <div class="ico">🧠</div>
+        <h3>Herhalen op het juiste moment</h3>
+        <p>Net als Anki: weet je een woord, dan komt het later terug. Weet je het niet, dan vaker. En nooit langer dan 6 dagen weg, zodat alles vers blijft voor de toets.</p>
+        <div class="srs"><span>1 min</span><em>→</em><span>10 min</span><em>→</em><span>1 dag</span><em>→</em><span>4 dagen</span><em>→</em><span class="max">max. 6 dagen</span></div>
+      </div>
+      <div class="feat o">
+        <div class="ico">🤏</div>
+        <h3>"Bijna goed!" in plaats van fout</h3>
+        <p>Typ je één letter fout of draai je twee letters om, dan krijg je eerst een tweede kans. <i>it's</i> = <i>it is</i>, en lidwoorden of hoofdletters maken niet uit. Per ongeluk op Enter? Dan vraagt de app eerst of je nog iets wilt typen.</p>
+      </div>
+      <div class="feat wide">
+        <div>
+          <div class="ico">📘</div>
+          <h3>Stones en grammatica: zinnen maken zoals op de toets</h3>
+          <p>Foto van een Stepping Stones-schema of van het grammatica-overzicht (some/any, meervouden, going to, this/that) → Claude verzint oefeningen: vertalen, vraag beantwoorden of gatenzin. Elke herhaling met andere woorden, en de regel staat erbij.</p>
+          <p style="margin-top:2mm">✍️ Antwoord op papier schrijven, omdraaien, zelf nakijken: zo leer je het het best.</p>
+        </div>
+        <div class="phone sm crop"><img src="img/stone-a.png" alt="" style="height: 64mm;"></div>
+        <div class="phone sm crop"><img src="img/almost.png" alt="" style="height: 64mm;"></div>
+      </div>
+      <div class="feat g split">
+        <div>
+          <div class="ico">✓</div>
+          <h3>Per deel oefenen</h3>
+          <p>De app onthoudt uit welk deel van het boek elk woord komt. Morgen een toets over <i>Flavours</i>? Vink alleen dat deel aan.</p>
+        </div>
+        <img src="img/sections.png" alt="">
+      </div>
+      <div class="feat">
+        <div class="ico">☁️</div>
+        <h3>Chromebook én iPhone, ook offline</h3>
+        <p>Overhoren in de bus op je telefoon, verder op de Chromebook. Woordjes, voortgang en instellingen synchroniseren, ook als de school Google-apps blokkeert. Updates komen vanzelf binnen.</p>
+      </div>
+    </div>
+  </div>
+  <div class="pageno"><b>Woordjes</b> · 3</div>
+</section>
+
+<!-- ============ 4. AAN DE SLAG ============ -->
+<section class="page">
+  <div class="inner">
+    <div class="kicker">Aan de slag</div>
+    <h2>In 1 minuut <span class="hl">klaar om te leren</span></h2>
+    <p class="intro">Geen app store en geen abonnement. Het is een website die je als app installeert.</p>
+
+    <div class="cta">
+      <div style="position:relative; z-index:2">
+        <h3>Open de app</h3>
+        <div class="url">jwk-md-rad.github.io/AnkiOl</div>
+        <ol>
+          <li><b>Chromebook:</b> open de link in Chrome → klik op ⊕ in de adresbalk → <i>Installeren</i>.</li>
+          <li><b>iPhone:</b> open de link in Safari → <i>Delen</i> → <i>Zet op beginscherm</i>.</li>
+          <li>Vul bij ⚙ <i>Instellingen</i> een Claude-sleutel in, maak een hoofdstuk en kies <i>Foto → kaartjes</i>.</li>
+        </ol>
+      </div>
+      <div class="qr"><img src="img/qr.png" alt=""><small>Scan met je telefoon</small></div>
+    </div>
+
+    <div class="prices">
+      <div class="price best">
+        <div class="what">De app</div>
+        <div class="amount">€ 0</div>
+        <ul>
+          <li>Overhoren, slim herhalen, intypen</li>
+          <li>Woordjes typen of plakken</li>
+          <li>Werkt offline</li>
+        </ul>
+      </div>
+      <div class="price o">
+        <div class="what">Claude AI <span>(voor foto's)</span></div>
+        <div class="amount">± 2–10 <small>cent per bladzijde</small></div>
+        <p>Leest de foto's en maakt de Stone- en grammatica-oefeningen. Met een eigen API-sleutel; je betaalt alleen wat je gebruikt.</p>
+      </div>
+      <div class="price">
+        <div class="what">Synchroniseren <span>(optioneel)</span></div>
+        <div class="amount">€ 0</div>
+        <p>Met een gratis GitHub-account en een eigen sleutel (3 minuten werk; de handleiding staat in de app).</p>
+      </div>
+    </div>
+
+    <div class="faq">
+      <div>
+        <h4>Waar staan mijn woordjes?</h4>
+        <p>Alleen op je eigen apparaat. Klasgenoten zien niets van elkaar. Met <i>Back-up downloaden</i> maak je een kopie.</p>
+      </div>
+      <div>
+        <h4>Werkt het op een school-Chromebook?</h4>
+        <p>Ja. Het is gewoon een website in Chrome, en overhoren werkt ook zonder internet.</p>
+      </div>
+      <div>
+        <h4>Welke talen?</h4>
+        <p>Engels, Frans en Duits naar Nederlands en terug. Per hoofdstuk in te stellen.</p>
+      </div>
+      <div>
+        <h4>Moet ik iets delen om mee te doen?</h4>
+        <p>Nee. Sleutels voor Claude of synchroniseren maakt iedereen zelf aan, zodat kosten en gegevens van jezelf blijven.</p>
+      </div>
+      <div>
+        <h4>Hoe snel gaat het?</h4>
+        <p>Claude leest een bladzijde in 10–30 seconden. Daarna is het alleen nog nakijken.</p>
+      </div>
+      <div>
+        <h4>En als ik het even niet snap?</h4>
+        <p>Achter het ❓ zit een uitleg in een paar plaatjes, met weinig tekst.</p>
+      </div>
+    </div>
+  </div>
+  <div class="closing"><b>Woordjes</b><span>Foto van je boek. Woordjes in je hoofd.</span></div>
+</section>
+
+</body>
+</html>

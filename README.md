@@ -23,6 +23,10 @@ Een AnkiWeb-achtige app om woordjes en zinnen te overhoren (Engels ↔ Nederland
 | 1 2 3 4 | Opnieuw / Moeilijk / Goed / Makkelijk |
 | Enter (intypen) | Controleren, daarna de voorgestelde beoordeling |
 
+## Brochure
+
+Een uitleg van 4 pagina's om de app aan anderen te laten zien: [brochure/Woordjes-brochure.pdf](brochure/Woordjes-brochure.pdf) (online: <https://jwk-md-rad.github.io/AnkiOl/brochure/Woordjes-brochure.pdf>). De bron is `brochure/brochure.html`; een nieuwe PDF maak je door die pagina in Chrome af te drukken als PDF (A4, marges *Geen*, *Achtergrondafbeeldingen* aan).
+
 ## Op de Chromebook zetten
 
 De app is een gewone website zonder server-onderdelen. Zet hem online met **GitHub Pages**:
