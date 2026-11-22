@@ -155,7 +155,7 @@ export async function getMeta(key, fallback) {
 
 // Overhoor-instellingen die mee synchroniseren tussen apparaten (met tijdstip,
 // zodat de laatste wijziging wint). Sleutels als de API-sleutel blijven lokaal.
-export const SYNCED_PREF = /^(newPerDay|speak|cheer|secondChance|model|study:.+|new:.+)$/;
+export const SYNCED_PREF = /^(newPerDay|extraNew|speak|cheer|secondChance|model|study:.+|new:.+)$/;
 
 export async function setMeta(key, value) {
   const synced = SYNCED_PREF.test(key);

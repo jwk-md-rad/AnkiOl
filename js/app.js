@@ -52,6 +52,8 @@ const settings = {
       syncMethod: await db.getMeta('syncMethod', 'github'),
       githubToken: await db.getMeta('githubToken', ''),
       newPerDay: await db.getMeta('newPerDay', 20),
+      // Zoveel nieuwe woordjes extra per tik op "Extra", als het aantal voor vandaag op is.
+      extraNew: await db.getMeta('extraNew', 10),
       speak: await db.getMeta('speak', true),
       cheer: await db.getMeta('cheer', true),
       secondChance: await db.getMeta('secondChance', true),
@@ -67,9 +69,6 @@ function speak(text, lang) {
   u.rate = 0.9;
   speechSynthesis.speak(u);
 }
-
-// Zoveel nieuwe woordjes extra per tik op "Extra", als het aantal voor vandaag op is.
-const EXTRA_NEW = 10;
 
 // Hoeveel nieuwe kaarten er vandaag nog geleerd mogen worden (per hoofdstuk).
 async function newLeftToday(deckId, perDay) {
@@ -811,7 +810,7 @@ function friendlyError(err) {
 
 async function studySetupView(deck) {
   const cards = await db.listCards(deck.id);
-  const { newPerDay } = await settings.get();
+  const { newPerDay, extraNew } = await settings.get();
   const newLeft = await newLeftToday(deck.id, newPerDay);
   const last = await db.getMeta(`study:${deck.id}`, { mode: 'flip', dir: 'fwd' });
   // Delen die je níet wilt oefenen (zo staan nieuwe delen vanzelf aan).
@@ -877,7 +876,7 @@ async function studySetupView(deck) {
     const cards = chosen();
     const c = countDue(cards, DIRS[form.dir.value]);
     const fresh = Math.min(c.fresh, newLeft + extra);
-    const more = Math.min(EXTRA_NEW, c.fresh - fresh);
+    const more = Math.min(extraNew, c.fresh - fresh);
     document.getElementById('summary').innerHTML = form.cram.checked
       ? `Toetsmodus: alle ${cards.length} woordjes komen langs. Je planning wordt niet aangepast.`
       : `Vandaag: <span class="c-new">${fresh} nieuw${extra ? ` (waarvan ${fresh - Math.min(c.fresh, newLeft)} extra)` : ''}</span> · <span class="c-learn">${c.learn} aan het leren</span> · <span class="c-review">${c.review} herhalen</span>` +
@@ -889,7 +888,7 @@ async function studySetupView(deck) {
   document.getElementById('summary').addEventListener('click', (e) => {
     if (e.target.id !== 'extraBtn') return;
     const c = countDue(chosen(), DIRS[form.dir.value]);
-    extra += Math.min(EXTRA_NEW, c.fresh - Math.min(c.fresh, newLeft + extra));
+    extra += Math.min(extraNew, c.fresh - Math.min(c.fresh, newLeft + extra));
     update();
   });
   form.onchange = update;
@@ -915,7 +914,7 @@ function cramSession(cards, dirs) {
 }
 
 async function studyView(deck, cards, { mode, dir, cram, newLeft }) {
-  const { speak: speakOn, cheer: cheerOn, secondChance: secondChanceOn } = await settings.get();
+  const { speak: speakOn, cheer: cheerOn, secondChance: secondChanceOn, extraNew } = await settings.get();
   let sinceCheer = 0;
   let cheerGap = nextGap();
   let lastCheer = {};
@@ -1102,7 +1101,7 @@ async function studyView(deck, cards, { mode, dir, cram, newLeft }) {
 
   function done() {
     // Nog nieuwe woordjes over? Dan kan er een extra rondje bij (los van het aantal per dag).
-    const more = cram ? 0 : Math.min(EXTRA_NEW, countDue(cards, dirs).fresh);
+    const more = cram ? 0 : Math.min(extraNew, countDue(cards, dirs).fresh);
     const left = session.items.filter(({ card, dir: d }) => card[d].state !== 'review');
     const soon = left.length ? Math.min(...left.map(({ card, dir: d }) => card[d].due)) - Date.now() : 0;
     const pct = session.stats.answered ? Math.round((1 - session.stats.again / session.stats.answered) * 100) : 0;
@@ -1268,6 +1267,9 @@ async function settingsView() {
         <label>Nieuwe woordjes per dag (per hoofdstuk)
           <input name="newPerDay" type="number" min="1" max="500" value="${s.newPerDay}">
         </label>
+        <label>Extra nieuwe woordjes per keer (knop <i>➕ Extra</i> als het aantal van vandaag op is)
+          <input name="extraNew" type="number" min="1" max="200" value="${s.extraNew}">
+        </label>
         <label class="inline"><input type="checkbox" name="speak" ${s.speak ? 'checked' : ''}> Woordjes voorlezen</label>
         <label class="inline"><input type="checkbox" name="cheer" ${s.cheer ? 'checked' : ''}> Aanmoedigingen tonen (gifjes tussendoor)</label>
         <label class="inline"><input type="checkbox" name="secondChance" ${s.secondChance ? 'checked' : ''}> Bij intypen: tweede kans bij één letter fout ("Bijna goed! Lees nog even na")</label>
@@ -1342,6 +1344,7 @@ async function settingsView() {
     e.preventDefault();
     const f = e.target;
     await db.setMeta('newPerDay', Math.max(1, Number(f.newPerDay.value) || 20));
+    await db.setMeta('extraNew', Math.max(1, Math.min(200, Number(f.extraNew.value) || 10)));
     await db.setMeta('speak', f.speak.checked);
     await db.setMeta('cheer', f.cheer.checked);
     await db.setMeta('secondChance', f.secondChance.checked);
