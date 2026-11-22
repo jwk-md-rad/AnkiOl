@@ -11,6 +11,19 @@ function shuffle(arr) {
   return arr;
 }
 
+// Uit welk deel van het boek komt een kaartje (bv. "B Groceries", "A Watching")?
+// Stone-oefeningen vallen onder hun Stone. Leeg = geen deel bekend.
+export function sectionOf(card) {
+  if (card.kind === 'stone') return `📘 ${card.stone || 'Stone'}`;
+  return (card.section || '').trim();
+}
+
+// Alle delen in een hoofdstuk, in boekvolgorde (A, B, …), Stones daarna, "geen deel" als laatste.
+export function sectionList(cards) {
+  const rank = (s) => (!s ? 2 : s.startsWith('📘') ? 1 : 0);
+  return [...new Set(cards.map(sectionOf))].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b, 'nl', { numeric: true }));
+}
+
 // Stone-oefeningen hebben maar één richting (de opdracht zelf bepaalt de taal).
 export function dirsFor(card, dirs) {
   return card.kind === 'stone' ? ['fwd'] : dirs;

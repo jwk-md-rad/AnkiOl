@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { newState, schedule, AGAIN, HARD, GOOD, EASY, MINUTE, DAY, DEFAULTS, previewLabels, capState } from '../js/srs.js';
 import { checkAnswer, normalize } from '../js/check.js';
-import { pairsFromText, pairsFromLines, plausible, pairsFromHighlights, highlightInk, findInSentence } from '../js/parse.js';
-import { Session, countDue, nextVariant, dirsFor, addVariants, needsMoreVariants } from '../js/session.js';
+import { pairsFromText, findInSentence } from '../js/parse.js';
+import { Session, countDue, nextVariant, dirsFor, addVariants, needsMoreVariants, sectionOf, sectionList } from '../js/session.js';
 
 const NOW = new Date('2026-10-02T15:00:00').getTime();
 
@@ -83,71 +83,6 @@ test('tekst plakken wordt gesplitst in paren', () => {
 
 // Nagebootste OCR-uitvoer zoals Tesseract die geeft (elke regel met woorden,
 // posities en basislijn), van een scheve, buigende leerboekpagina.
-function fakeOcr(cells, { slope = (x, y) => -0.08 + y / 20000 } = {}) {
-  const H = 30;
-  return cells.map(([text, x, row, conf = 92]) => {
-    const words = [];
-    let cx = x;
-    const y0 = 60 + row * 55;
-    for (const t of text.split(' ')) {
-      const w = t.length * 16;
-      const m = slope(cx, y0);
-      const yb = y0 + m * cx;
-      words.push({ text: t, confidence: conf, bbox: { x0: cx, x1: cx + w, y0: yb - H, y1: yb }, baseline: { x0: cx, x1: cx + w, y0: yb, y1: yb + m * w, has_baseline: true } });
-      cx += w + 12;
-    }
-    const f = words[0];
-    const l = words[words.length - 1];
-    return { words, baseline: { x0: f.baseline.x0, y0: f.baseline.y0, x1: l.baseline.x1, y1: l.baseline.y1 } };
-  });
-}
-
-test('OCR-pagina: twee tabellen, schuin, vakjes, getallen, kopjes, doorlopende woordjes', () => {
-  const cells = [
-    ['B Looks', 60, 0], ['Uiterlijk', 360, 0],
-    ['O bald', 60, 1], ['kaal', 360, 1],
-    ['[J beard', 60, 2], ['[brɪəd]', 230, 2, 60], ['baard', 360, 2],
-    ['WW scar', 60, 3], ['litteken', 360, 3],
-    ['thirty', 60, 4], ['30', 360, 4],
-    ['O great-', 60, 5], ['overgrootvader', 360, 5],
-    ['grandfather', 60, 6],
-    ['one thousand', 60, 7],
-    ['and eleven', 60, 8], ['1011', 360, 8],
-    ['O nephew', 60, 9], ['neef (kind van', 360, 9],
-    ['zus/broer)', 360, 10],
-    ['O shy', 800, 1], ['verlegen', 1100, 1],
-    ['O smart', 800, 2], ['slim', 1100, 2],
-    ['O sweet', 800, 3], ['lief', 1100, 3],
-    ['O mean', 800, 4], ['gemeen', 1100, 4],
-    ['~|', 800, 5, 20],
-  ];
-  const rows = pairsFromLines(fakeOcr(cells));
-  const ok = rows.filter((r) => r.ok).map((r) => `${r.front} = ${r.back}`);
-  assert.deepEqual(ok, [
-    'bald = kaal',
-    'beard = baard',
-    'scar = litteken',
-    'thirty = 30',
-    'great-grandfather = overgrootvader',
-    'one thousand and eleven = 1011',
-    'nephew = neef (kind van zus/broer)',
-    'shy = verlegen',
-    'smart = slim',
-    'sweet = lief',
-    'mean = gemeen',
-  ]);
-  assert.ok(rows.some((r) => r.front === 'Looks' && r.back === 'Uiterlijk' && !r.ok), 'kopje niet aangevinkt');
-});
-
-test('plausible herkent OCR-rommel', () => {
-  assert.equal(plausible('house'), true);
-  assert.equal(plausible('„B'), false);
-  assert.equal(plausible('oY) ga. 0'), false);
-  assert.equal(plausible('§'), false);
-  assert.equal(plausible('stiefvader', 30), false);
-  assert.equal(plausible('1011'), true);
-});
-
 test('sessie: nieuwe kaarten max per dag, één richting per kaart', () => {
   const cards = Array.from({ length: 30 }, (_, i) => ({
     id: `c${i}`,
@@ -326,68 +261,6 @@ test('apostrof vergeten = bijna goed met tweede kans', async () => {
   assert.equal(oneLetterOff('cannot', "can't"), false); // gewoon goed
 });
 
-// Nep-OCR van een bladzijde met voorbeeldzinnen (oranje woord) en rechts de vertaling.
-function fakeHighlightPage(rows, { slope = 0.04, curve = 0.00002 } = {}) {
-  const H = 30;
-  const words = [];
-  rows.forEach(([sentence, hl, dutch], i) => {
-    const base = 200 + i * 55;
-    const yAt = (x) => base + slope * x + curve * x * x;
-    let x = 100;
-    for (const t of sentence.split(' ')) {
-      const w = t.length * 16;
-      words.push({ text: t, confidence: 92, hl: hl.includes(t.replace(/[.,!?]$/, '')), bbox: { x0: x, x1: x + w, y0: yAt(x) - H, y1: yAt(x) } });
-      x += w + 12;
-    }
-    if (!dutch) return;
-    x = 1500 + i * 3; // kolom loopt door het perspectief iets schuin
-    for (const t of ['O', ...dutch.split(' ')]) {
-      const w = t.length * 16;
-      words.push({ text: t, confidence: 90, hl: false, bbox: { x0: x, x1: x + w, y0: yAt(x) - H, y1: yAt(x) } });
-      x += w + 12;
-    }
-  });
-  return [{ words }];
-}
-
-test('oranje woorden in voorbeeldzinnen worden kaartjes met voorbeeldzin', () => {
-  const rows = pairsFromHighlights(
-    fakeHighlightPage([
-      ["It's almost time to leave for school.", ['almost'], 'bijna'],
-      ['You really have to use your brain.', ['brain'], 'hersenen'],
-      ['If you miss school, you have to catch up on assignments.', ['catch', 'up'], 'inhalen'],
-      ['We have to be very lucky to have such nice neighbours.', ['be', 'lucky'], 'geluk hebben, mazzel hebben'],
-      ['It is hard to focus on your homework.', ['focus'], 'zich concentreren'],
-      ['Our teacher always wants complete silence.', ['silence'], 'stilte'],
-    ])
-  );
-  assert.deepEqual(
-    rows.map((r) => [r.front, r.back, r.ok]),
-    [
-      ['almost', 'bijna', true],
-      ['brain', 'hersenen', true],
-      ['catch up', 'inhalen', true],
-      ['be lucky', 'geluk hebben, mazzel hebben', true],
-      ['focus', 'zich concentreren', true],
-      ['silence', 'stilte', true],
-    ]
-  );
-  assert.equal(rows[2].example, 'If you miss school, you have to catch up on assignments.');
-  // Gewone woordenlijst zonder gekleurde woorden: niet deze indeling.
-  assert.equal(pairsFromHighlights(fakeOcr([['house', 100, 0], ['huis', 600, 0], ['tree', 100, 1], ['boom', 600, 1]])), null);
-});
-
-test('kleur van de inkt: oranje of zwart', () => {
-  const px = (ink) => {
-    const d = [];
-    for (let i = 0; i < 200; i++) d.push(...(i % 3 ? [235, 228, 215, 255] : [...ink, 255]));
-    return d;
-  };
-  assert.equal(highlightInk(px([180, 115, 80])), true);
-  assert.equal(highlightInk(px([65, 48, 40])), false);
-  assert.equal(highlightInk(px([40, 40, 40])), false);
-});
-
 test('woord terugvinden in de voorbeeldzin', () => {
   const s = 'We have to be very lucky to have such nice neighbours.';
   assert.deepEqual(findInSentence(s, 'be lucky').map(([a, b]) => s.slice(a, b)), ['be', 'lucky']);
@@ -439,4 +312,11 @@ test('herhalingen nooit verder dan 6 dagen vooruit', () => {
   assert.ok(old.due <= NOW + 6 * DAY);
   assert.equal(capState(old, NOW), false, 'tweede keer niets meer te doen');
   assert.equal(capState(newState(), NOW), false);
+});
+
+test('delen van het boek: volgorde en Stones', () => {
+  // Volgorde voor de keuze bij overhoren: A, B, … dan Stones, dan "zonder deel".
+  const cards = [{ section: 'D Flavours' }, {}, { kind: 'stone', stone: 'Stone 3' }, { section: 'A Watching' }, { section: 'B Groceries' }];
+  assert.deepEqual(sectionList(cards), ['A Watching', 'B Groceries', 'D Flavours', '📘 Stone 3', '']);
+  assert.equal(sectionOf({ kind: 'stone', stone: 'Stone 3', section: 'x' }), '📘 Stone 3');
 });

@@ -1,5 +1,5 @@
 // Service worker: houdt de app offline beschikbaar.
-const CACHE = 'woordjes-v26';
+const CACHE = 'woordjes-v28';
 const SHELL = [
   './',
   'index.html',
@@ -15,7 +15,6 @@ const SHELL = [
   'js/check.js',
   'js/parse.js',
   'js/image.js',
-  'js/ocr.js',
   'js/claude.js',
   'js/config.js',
   'js/merge.js',
@@ -60,7 +59,7 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
-  // Externe bibliotheken (OCR, Claude SDK): eerst cache, zodat ze offline blijven werken.
+  // Externe bibliotheken (HEIC-lezer, Claude SDK): eerst cache, zodat ze offline blijven werken.
   if (url.hostname === 'cdn.jsdelivr.net' || url.hostname === 'esm.sh') {
     e.respondWith(
       caches.match(req).then(
