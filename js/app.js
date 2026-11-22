@@ -459,7 +459,7 @@ async function photoView(deck, mode = 'words') {
       ${
         stoneMode
           ? `<h2>📘 Stone → oefeningen</h2>
-      <p class="muted">Maak een foto van een Stone (het schema met zinsdelen in vakjes). Claude maakt er oefenzinnen van met steeds andere namen, datums en woorden.
+      <p class="muted">Maak een foto van een Stone (het schema met zinsdelen in vakjes) of van een grammatica-overzicht (bv. some/any, meervouden, going to). Claude maakt er oefenzinnen van met steeds andere namen, datums en woorden.
       Je schrijft je antwoord op papier en kijkt daarna zelf na.</p>
       ${apiKey ? '' : '<p class="panel error">Hiervoor is Claude nodig. Vul eerst een API-sleutel in bij <a href="#/settings">⚙ Instellingen</a>.</p>'}`
           : `<h2>Foto → kaartjes</h2>
@@ -593,7 +593,7 @@ async function photoView(deck, mode = 'words') {
         const { claudeStone } = await import('./claude.js');
         const jpegs = photos.map(({ bitmap, rotate, crop }) => canvasToBase64Jpeg(toCanvas(bitmap, 1800, { rotate, crop })));
         const stone = await claudeStone(jpegs, apiKey, { model });
-        progress.textContent = stone.exercises.length ? `${stone.exercises.length} oefeningen gemaakt.` : 'Geen Stone gevonden op de foto.';
+        progress.textContent = stone.exercises.length ? `${stone.exercises.length} oefeningen gemaakt.` : 'Geen Stone of grammatica gevonden op de foto.';
         if (stone.exercises.length) document.getElementById('review').appendChild(stoneReview(deck, stone));
       } catch (err) {
         console.error(err);
