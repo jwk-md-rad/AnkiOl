@@ -4,25 +4,37 @@
 const SDK_URL = 'https://esm.sh/@anthropic-ai/sdk';
 const LANG_NAMES = { en: 'Engels', nl: 'Nederlands', fr: 'Frans', de: 'Duits' };
 
+// Per deel van de bladzijde (kopje) de kaartjes, in de volgorde van het boek.
+// Zo volgt Claude de indeling kolom voor kolom in plaats van per woord te raden.
 const SCHEMA = {
   type: 'object',
   properties: {
-    cards: {
+    sections: {
       type: 'array',
       items: {
         type: 'object',
         properties: {
-          front: { type: 'string' },
-          back: { type: 'string' },
-          example: { type: 'string' },
           section: { type: 'string' },
+          cards: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                front: { type: 'string' },
+                back: { type: 'string' },
+                example: { type: 'string' },
+              },
+              required: ['front', 'back', 'example'],
+              additionalProperties: false,
+            },
+          },
         },
-        required: ['front', 'back', 'example', 'section'],
+        required: ['section', 'cards'],
         additionalProperties: false,
       },
     },
   },
-  required: ['cards'],
+  required: ['sections'],
   additionalProperties: false,
 };
 
@@ -68,16 +80,34 @@ Maak er flashcards van:
 - Staat er een voorbeeldzin met vertaling bij, maak daar dan een aparte kaart van.
 - Sommige bladzijdes hebben ${front} voorbeeldzinnen waarin het te leren woord (of de woordgroep) gekleurd is, bijvoorbeeld oranje, met rechts (achter een vakje) alleen de ${back} vertaling van dat woord. Maak dan per zin één kaart: "front" = alleen het gekleurde woord of de gekleurde woordgroep, precies zoals in de zin (staan de gekleurde woorden niet naast elkaar, zoals "be very lucky" met "be" en "lucky" gekleurd, zet dan alleen de gekleurde woorden achter elkaar: "be lucky"); "back" = de vertaling uit de rechterkolom; "example" = de hele voorbeeldzin, letterlijk overgenomen.
 - Bij gewone woordjes zonder zo'n voorbeeldzin is "example" een lege string.
-- "section" is het deel van de bladzijde waar het woord onder staat: de letter en de Engelse titel van het kopje, bv.
-  "B Groceries", "B In the kitchen", "D Flavours", "H At the restaurant", "A Watching" (hoofdletters alleen aan het begin).
-  Een deel kan doorlopen in de volgende kolom: woorden bovenaan een kolom zonder eigen kopje horen bij het laatste kopje
-  van de kolom ervoor. Staat er geen kopje met een letter, gebruik dan het kopje zelf; is er helemaal geen kopje, een lege string.
+- Geef de kaarten per deel van de bladzijde ("sections"). Een deel begint bij een kopje, meestal een letter met een Engelse
+  titel ("B Groceries", "D Flavours", "H At the restaurant", "A WATCHING"). "section" is die letter met de Engelse titel,
+  met alleen een hoofdletter aan het begin: "B Groceries", "B In the kitchen", "D Flavours", "H At the restaurant", "A Watching".
+  Werk zo: lees de bladzijde kolom voor kolom (eerst de linker kolom van boven naar beneden, dan de volgende kolom).
+  Elk kopje begint een nieuw deel. Een deel loopt door tot het volgende kopje, ook over de rand van een kolom heen:
+  woorden bovenaan een kolom zonder eigen kopje horen nog bij het laatste kopje van de kolom ervoor.
+  Een woord dat ONDER een kopje staat, hoort altijd bij dat kopje en niet bij een eerder deel.
+  Pijltjes of andere tekentjes bij een kopje horen niet bij de titel. Twee delen met dezelfde letter (bv. "B Groceries" en
+  "B In the kitchen") zijn aparte delen. Staat er geen kopje met een letter, gebruik dan het kopje zelf; zonder kopje een lege string.
 - De foto kan scheef of op z'n kant staan; lees hem in de juiste richting.
 - Verzin niets wat niet op de foto staat. Is de foto onleesbaar, geef dan een lege lijst.`;
 
   const parsed = await askClaude({ images: [base64Jpeg], prompt, schema: SCHEMA, apiKey, model });
-  return parsed.cards
-    .map((c) => ({ front: c.front.trim(), back: c.back.trim(), example: (c.example || '').trim(), section: (c.section || '').trim(), ok: true }))
+  return cardsFromSections(parsed);
+}
+
+// Antwoord van Claude (kaarten per deel) → één lijst kaartjes met hun deel.
+export function cardsFromSections(parsed) {
+  return (parsed.sections || [])
+    .flatMap((s) =>
+      (s.cards || []).map((c) => ({
+        front: c.front.trim(),
+        back: c.back.trim(),
+        example: (c.example || '').trim(),
+        section: (s.section || '').trim(),
+        ok: true,
+      }))
+    )
     .filter((c) => c.front && c.back);
 }
 

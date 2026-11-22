@@ -320,3 +320,18 @@ test('delen van het boek: volgorde en Stones', () => {
   assert.deepEqual(sectionList(cards), ['A Watching', 'B Groceries', 'D Flavours', '📘 Stone 3', '']);
   assert.equal(sectionOf({ kind: 'stone', stone: 'Stone 3', section: 'x' }), '📘 Stone 3');
 });
+
+test('Claude-antwoord per deel → kaartjes met hun deel', async () => {
+  const { cardsFromSections } = await import('../js/claude.js');
+  const cards = cardsFromSections({
+    sections: [
+      { section: 'B In the kitchen', cards: [{ front: 'slice', back: 'plak, snee', example: '' }] },
+      { section: 'D Flavours', cards: [{ front: ' savoury ', back: 'hartig', example: '' }, { front: '', back: 'leeg', example: '' }] },
+    ],
+  });
+  assert.deepEqual(
+    cards.map((c) => [c.front, c.back, c.section]),
+    [['slice', 'plak, snee', 'B In the kitchen'], ['savoury', 'hartig', 'D Flavours']]
+  );
+  assert.deepEqual(cardsFromSections({}), []);
+});
