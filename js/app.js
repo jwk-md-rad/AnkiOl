@@ -1,5 +1,5 @@
 import * as db from './db.js';
-import { previewLabels, AGAIN, HARD, GOOD, EASY, formatMs } from './srs.js';
+import { previewLabels, AGAIN, HARD, GOOD, EASY, formatMs, capState } from './srs.js';
 import { Session, countDue, nextVariant, needsMoreVariants, addVariants } from './session.js';
 import { checkAnswer, normalize, oneLetterOff } from './check.js';
 import { pairsFromText, findInSentence } from './parse.js';
@@ -1342,6 +1342,8 @@ async function runSync({ interactive = false } = {}) {
   updateSyncButton();
   try {
     const res = viaGithub ? await syncGist(githubToken, { interactive }) : await syncNow({ clientId, interactive });
+    // Van het andere apparaat kan een te ver geplande herhaling komen.
+    await capAllCards();
     await db.setMeta('syncOn', true);
     await db.setMeta('lastSyncError', '');
     syncState = 'ok';
@@ -1366,6 +1368,15 @@ db.setOnChange(() => {
     if (await db.getMeta('syncOn', false)) runSync();
   }, 5000);
 });
+
+// ---------- Maximaal aantal dagen tussen herhalingen ----------
+
+// Kaartjes die verder vooruit gepland staan dan het maximum (6 dagen) terughalen.
+async function capAllCards() {
+  const now = Date.now();
+  const changed = (await db.allCards()).filter((c) => [capState(c.fwd, now), capState(c.rev, now)].some(Boolean));
+  if (changed.length) await db.putCards(changed);
+}
 
 // ---------- Versie ----------
 
@@ -1410,7 +1421,9 @@ if ('serviceWorker' in navigator) {
 }
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
 document.getElementById('syncBtn').onclick = () => runSync({ interactive: true });
-route();
+capAllCards()
+  .catch((err) => console.warn('Herhalingen begrenzen lukte niet:', err))
+  .finally(() => route());
 checkForUpdate();
 (async () => {
   if (!(await db.getMeta('syncOn', false))) return;

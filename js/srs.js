@@ -16,7 +16,7 @@ export const DEFAULTS = {
   easyBonus: 1.3,
   hardFactor: 1.2,
   lapseFactor: 0.5,
-  maxInterval: 3650,
+  maxInterval: 6, // dagen: elk woordje komt minstens eens per 6 dagen terug
 };
 
 export const AGAIN = 1;
@@ -136,6 +136,25 @@ export function formatDays(d) {
   if (d < 31) return `${d} d`;
   if (d < 365) return `${Math.round(d / 30.4)} mnd`;
   return `${(d / 365).toFixed(1).replace('.0', '')} j`;
+}
+
+// Kaartjes die (met een oudere versie) verder dan het maximum vooruit
+// gepland staan, naar het maximum terughalen. Geeft true als er iets veranderde.
+export function capState(s, now = Date.now(), opts = DEFAULTS) {
+  if (!s || s.state === 'new') return false;
+  let changed = false;
+  if (s.interval > opts.maxInterval) {
+    s.interval = opts.maxInterval;
+    changed = true;
+  }
+  if (s.state === 'review') {
+    const latest = dueInDays(s.lastReview || now, opts.maxInterval);
+    if (s.due > latest) {
+      s.due = latest;
+      changed = true;
+    }
+  }
+  return changed;
 }
 
 export function isDue(state, now = Date.now()) {
