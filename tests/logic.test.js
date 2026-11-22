@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { newState, schedule, AGAIN, HARD, GOOD, EASY, MINUTE, previewLabels } from '../js/srs.js';
+import { newState, schedule, AGAIN, HARD, GOOD, EASY, MINUTE, DAY, DEFAULTS, previewLabels, capState } from '../js/srs.js';
 import { checkAnswer, normalize } from '../js/check.js';
 import { pairsFromText, pairsFromLines, plausible, pairsFromHighlights, highlightInk, findInSentence } from '../js/parse.js';
 import { Session, countDue, nextVariant, dirsFor, addVariants, needsMoreVariants } from '../js/session.js';
@@ -30,19 +30,21 @@ test('makkelijk studeert direct af met 4 dagen', () => {
 });
 
 test('intervallen groeien en een fout verlaagt ease', () => {
+  // Het algoritme zelf, zonder het maximum van 6 dagen.
+  const opts = { ...DEFAULTS, maxInterval: 3650 };
   let s = { ...newState(), state: 'review', interval: 10, ease: 2.5, due: NOW };
-  const good = schedule(s, GOOD, NOW);
+  const good = schedule(s, GOOD, NOW, opts);
   assert.equal(good.interval, 25);
-  const hard = schedule(s, HARD, NOW);
+  const hard = schedule(s, HARD, NOW, opts);
   assert.equal(hard.interval, 12);
-  const easy = schedule(s, EASY, NOW);
+  const easy = schedule(s, EASY, NOW, opts);
   assert.ok(easy.interval > good.interval);
-  const lapse = schedule(s, AGAIN, NOW);
+  const lapse = schedule(s, AGAIN, NOW, opts);
   assert.equal(lapse.state, 'relearning');
   assert.equal(lapse.lapses, 1);
   assert.equal(lapse.interval, 5);
   assert.ok(Math.abs(lapse.ease - 2.3) < 1e-9);
-  const back = schedule(lapse, GOOD, NOW + 10 * MINUTE);
+  const back = schedule(lapse, GOOD, NOW + 10 * MINUTE, opts);
   assert.equal(back.state, 'review');
   assert.equal(back.interval, 5);
 });
@@ -422,4 +424,19 @@ test('synchroniseren: overhoor-instellingen, laatste wijziging wint', async () =
   assert.equal(prefs['study:weg'], undefined, 'instelling van een verwijderd hoofdstuk valt weg');
   // Oude gegevens zonder instellingen blijven werken.
   assert.deepEqual(mergeData({ decks: [deck], cards: [] }, { decks: [deck], cards: [] }).prefs, {});
+});
+
+test('herhalingen nooit verder dan 6 dagen vooruit', () => {
+  let s = schedule(newState(), EASY, NOW);
+  for (let i = 0; i < 6; i++) s = schedule(s, EASY, s.due);
+  assert.equal(s.interval, 6);
+  assert.ok(s.due - s.lastReview <= 6 * DAY + DAY, 'hooguit 6 dagen (tot de volgende leerdag)');
+  assert.equal(previewLabels(s, s.due)[4], '6 d');
+  // Eerder (met een oudere versie) 25 dagen vooruit gepland: terug naar 6 dagen.
+  const old = { ...newState(), state: 'review', interval: 25, ease: 2.5, lastReview: NOW, due: NOW + 25 * DAY };
+  assert.equal(capState(old, NOW), true);
+  assert.equal(old.interval, 6);
+  assert.ok(old.due <= NOW + 6 * DAY);
+  assert.equal(capState(old, NOW), false, 'tweede keer niets meer te doen');
+  assert.equal(capState(newState(), NOW), false);
 });
