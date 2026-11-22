@@ -138,6 +138,16 @@ export async function deleteCard(id) {
   onChange();
 }
 
+// Meerdere kaartjes tegelijk verwijderen (bv. een heel deel of het hele hoofdstuk leegmaken).
+export async function deleteCards(ids) {
+  if (!ids.length) return;
+  await tx(['cards', 'meta'], 'readwrite', async (t) => {
+    for (const id of ids) t.objectStore('cards').delete(id);
+    await addTombstones(t, ids);
+  });
+  onChange();
+}
+
 export async function getMeta(key, fallback) {
   const row = await tx(['meta'], 'readonly', (t) => wrap(t.objectStore('meta').get(key)));
   return row ? row.value : fallback;

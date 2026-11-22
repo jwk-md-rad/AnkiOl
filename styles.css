@@ -314,3 +314,4 @@ small.example { display: block; text-align: left; font-size: 0.8rem; margin: 0.2
 tr.sec-head th { padding-top: 14px; font-size: 0.95rem; color: var(--text); border-bottom: 2px solid var(--line); }
 input.s { min-width: 7em; }
 .sections .row { gap: 12px; }
+tr.sec-head .delsec { float: right; font-weight: normal; font-size: 0.85rem; }

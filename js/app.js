@@ -246,7 +246,8 @@ async function deckView(deck) {
             (card, i) => `
           ${
             grouped && (i === 0 || sectionOf(card) !== sectionOf(cards[i - 1]))
-              ? `<tr class="sec-head"><th colspan="5">${esc(sectionOf(card) || 'Zonder deel')} <small class="muted">(${cards.filter((x) => sectionOf(x) === sectionOf(card)).length})</small></th></tr>`
+              ? `<tr class="sec-head"><th colspan="5">${esc(sectionOf(card) || 'Zonder deel')} <small class="muted">(${cards.filter((x) => sectionOf(x) === sectionOf(card)).length})</small>
+                  <button type="button" class="link delsec" data-sec="${esc(sectionOf(card))}">Deel verwijderen</button></th></tr>`
               : ''
           }
           <tr data-id="${card.id}">
@@ -272,7 +273,8 @@ async function deckView(deck) {
         <label>Naam <input name="name" value="${esc(deck.name)}" required></label>
         <label>Voorkant <select name="frontLang">${langOpts(deck.frontLang)}</select></label>
         <label>Achterkant <select name="backLang">${langOpts(deck.backLang)}</select></label>
-        <div class="row"><button>Opslaan</button><button type="button" id="delDeck" class="danger">Hoofdstuk verwijderen</button></div>
+        <div class="row"><button>Opslaan</button>${cards.length ? '<button type="button" id="emptyDeck" class="danger">Hoofdstuk leegmaken</button>' : ''}<button type="button" id="delDeck" class="danger">Hoofdstuk verwijderen</button></div>
+        <p class="muted small"><b>Leegmaken</b> haalt alle woordjes weg; het hoofdstuk blijft bestaan. <b>Verwijderen</b> haalt ook het hoofdstuk zelf weg.</p>
       </form>
     </section>`);
 
@@ -292,6 +294,14 @@ async function deckView(deck) {
     if (e.target.classList.contains('s')) route();
   });
   tbody.addEventListener('click', async (e) => {
+    if (e.target.classList.contains('delsec')) {
+      const sec = e.target.dataset.sec;
+      const ids = cards.filter((x) => sectionOf(x) === sec).map((x) => x.id);
+      if (!confirm(`Alle ${ids.length} woordjes van "${sec || 'Zonder deel'}" verwijderen?`)) return;
+      await db.deleteCards(ids);
+      toast(`${ids.length} woordjes verwijderd`, 'ok');
+      return route();
+    }
     if (!e.target.classList.contains('del')) return;
     const tr = e.target.closest('tr');
     await db.deleteCard(tr.dataset.id);
@@ -324,6 +334,15 @@ async function deckView(deck) {
         console.error(err);
         toast(friendlyError(err), 'bad');
       }
+      route();
+    };
+  }
+  const empty = document.getElementById('emptyDeck');
+  if (empty) {
+    empty.onclick = async () => {
+      if (!confirm(`Alle ${cards.length} woordjes uit "${deck.name}" verwijderen? Het hoofdstuk zelf blijft bestaan.`)) return;
+      await db.deleteCards(cards.map((x) => x.id));
+      toast(`${cards.length} woordjes verwijderd`, 'ok');
       route();
     };
   }
