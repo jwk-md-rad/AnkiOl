@@ -118,16 +118,27 @@ export const STONE_TYPES = {
   gap: 'Vul het ontbrekende stuk in',
 };
 
-// Foto('s) van een "Stone" (schema met zinsdelen in vakjes) → oefeningen met varianten.
+// Foto('s) van een "Stone" (schema met zinsdelen in vakjes) of een grammatica-overzicht
+// (regels met voorbeeldzinnen) → oefeningen met varianten.
 export async function claudeStone(base64Jpegs, apiKey, { model = 'claude-opus-5-5' } = {}) {
-  const prompt = `Dit is een "Stone" uit het Engelse schoolboek Stepping Stones (brugklas, Nederlandse leerling van 12–13 jaar).
-Een Stone is een schema van zinsdelen in vakjes, verbonden met lijnen: elk pad door de vakjes vormt een zin (vraag of antwoord).
+  const prompt = `Dit is een bladzijde uit het Engelse schoolboek Stepping Stones (brugklas, Nederlandse leerling van 12–13 jaar).
+Het is een "Stone" of een grammatica-overzicht:
+- Een Stone is een schema van zinsdelen in vakjes, verbonden met lijnen: elk pad door de vakjes vormt een zin (vraag of antwoord).
+- Een grammatica-overzicht (bv. "Grammar", "Grammar Survey", tabellen met genummerde onderwerpen zoals "Some and any",
+  "Plurals", "Future: going to", "This, that, these, those") geeft per onderwerp de regel met voorbeeldzinnen of voorbeeldwoorden.
+  Behandel dan elk grammatica-onderwerp als een zinspatroon, en de regels en voorbeelden uit de tabel als de zinsbouw.
+  Bij woordvormen (bv. meervouden) maak je "gap"-oefeningen met het grondwoord als hint, bv. "Two ___ (knife)." → "knives",
+  met andere woorden dan in het boek die dezelfde regel volgen (en de onregelmatige woorden uit de tabel zelf, die moet
+  de leerling uit zijn hoofd kennen). Bij een keuze (bv. some/any, this/that/these/those) zet je de keuzes als hint tussen
+  haakjes, bv. "Are there ___ (some/any) apples?" → "any", of een Nederlandse hint als dat duidelijker is ("___ shoes (deze)").
+  Gebruik bij "translate" zinnen die precies die grammatica oefenen.
 De school zegt: "Leer de Stones net als de woordjes. Herhaal, varieer en schrijf op! Verander bijvoorbeeld de onderwerpen,
 werkwoorden en andere vocabulaire. Leerlingen moeten de Stones ook kunnen toepassen in een lopende tekst."
 
 Maak oefeningen waarmee de leerling de zinsbouw van deze Stone leert. De leerling schrijft zijn antwoord op papier en kijkt
 daarna zelf na met jouw antwoord. Doe dit:
-1. Lees alle zinnen die het schema maakt (alle paden door de vakjes). "title" is de titel van de Stone, bv. "Stone 2 – Talking about personal information".
+1. Lees alle zinnen die het schema maakt (alle paden door de vakjes), of alle onderwerpen en voorbeelden van het grammatica-overzicht.
+   "title" is de titel, bv. "Stone 2 – Talking about personal information" of "Grammar Chapter 3 – some/any, plurals, going to, this/that".
 2. Maak per zinspatroon oefeningen van deze soorten (niet elk patroon hoeft alle soorten):
    - "translate": "prompt" is een natuurlijke Nederlandse zin, "answer" de Engelse zin volgens het patroon.
    - "answer": "prompt" is een Engelse vraag uit de Stone, "answer" een voorbeeldantwoord in een volledige Engelse zin
@@ -143,10 +154,12 @@ daarna zelf na met jouw antwoord. Doe dit:
    personen waar de zinsbouw dat toelaat (he, she, my sister, they, Tom en Lisa), zodat de leerling de zinsbouw toepast in plaats
    van één zin uit zijn hoofd te leren.
 4. "pattern" is het patroon in het Engels met het variabele deel tussen haakjes, bv. "When is your birthday? – My birthday is on the (17th) of (May)."
+   Bij grammatica: de regel kort, met het onderwerp ervoor, bv. "Plurals: consonant + y → -ies (party → parties)" of
+   "Some/any: some in + zinnen en in vragen waarop je 'ja' verwacht; any in – zinnen en gewone vragen".
 5. "alternatives": andere goede antwoorden (bv. "I'm" naast "I am", "It's" naast "It is", andere woordvolgorde die ook klopt).
    Laat leeg als er geen zijn.
-6. Maak in totaal 15 tot 30 oefeningen. Verzin geen grammatica die niet in de Stone staat.
-De foto kan scheef of op z'n kant staan. Is het geen Stone of is hij onleesbaar, geef dan een lege lijst.`;
+6. Maak in totaal 15 tot 30 oefeningen, verdeeld over alle onderwerpen. Verzin geen grammatica die niet op de foto staat.
+De foto kan scheef of op z'n kant staan. Staat er geen Stone en geen grammatica op, of is hij onleesbaar, geef dan een lege lijst.`;
 
   const parsed = await askClaude({ images: base64Jpegs, prompt, schema: STONE_SCHEMA, apiKey, model, maxTokens: 32000 });
   const exercises = parsed.exercises
@@ -194,8 +207,8 @@ export async function claudeMoreVariants(exercises, apiKey, { model = 'claude-op
     zinsbouw: e.pattern,
     al_gebruikt: e.variants.map((v) => `${v.prompt} → ${v.answer}`),
   }));
-  const prompt = `Je maakt oefenzinnen voor een Nederlandse brugklasleerling (12–13 jaar) die de "Stones" uit het Engelse schoolboek
-Stepping Stones leert: zinsbouw-schema's die je moet kunnen toepassen met steeds andere woorden. De school zegt: "Herhaal,
+  const prompt = `Je maakt oefenzinnen voor een Nederlandse brugklasleerling (12–13 jaar) die de "Stones" en de grammatica uit het
+Engelse schoolboek Stepping Stones leert: zinsbouw-schema's en grammaticaregels die je moet kunnen toepassen met steeds andere woorden. De school zegt: "Herhaal,
 varieer en schrijf op! Verander de onderwerpen, werkwoorden en andere vocabulaire." De leerling schrijft het antwoord op
 papier en kijkt zelf na.
 
