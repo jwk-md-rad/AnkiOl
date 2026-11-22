@@ -88,7 +88,12 @@ export async function ocrPairs(canvas, onProgress = () => {}, { psm = '11', auto
     markHighlights(lines, rotation ? toCanvas(color, Infinity, { rotate: rotation }) : color);
     // Voorbeeldzinnen met gekleurde woorden? Dan die indeling gebruiken.
     const rows = pairsFromHighlights(lines);
-    if (rows && rows.filter((r) => r.back).length >= 3) return { rows, text: data.text, rotation };
+    if (rows && rows.filter((r) => r.back).length >= 3) {
+      if (!rows.mixed) return { rows, text: data.text, rotation };
+      // Gemengde bladzijde: de rest (zonder de zinnen) als gewone woordenlijst lezen.
+      const rest = lines.map((l) => ({ ...l, words: (l.words || []).filter((w) => !rows.used.has(w)) })).filter((l) => l.words.length);
+      return { rows: [...pairsFromLines(rest), ...rows], text: data.text, rotation };
+    }
   }
   const rows = lines.length ? pairsFromLines(lines) : pairsFromText(data.text);
   return { rows, text: data.text, rotation };

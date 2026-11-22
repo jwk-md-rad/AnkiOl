@@ -192,6 +192,8 @@ function segmentsFromLines(lines) {
         y,
         ...wordSlopes(g0.filter((w) => w.text.trim()), H),
         heading,
+        // "B Groceries": letter + titel, als naam van het deel (de letter zou anders als vakje wegvallen).
+        part: heading ? sectionName(g0.map((w) => w.text).join(' ')) : '',
       });
     }
   }
@@ -416,12 +418,18 @@ export function pairsFromLines(lines) {
     for (const L of extraCols) attachContinuations(L, 'back', rowB, used, spacing, rotY);
     const lower = rows.filter((r) => /^\p{Ll}/u.test(r.front)).length > rows.length / 2;
     const capitalized = (r) => lower && /^\p{Lu}/u.test(r.front) && /^\p{Lu}/u.test(r.back);
-    const found = rows.map((r) => ({ y: rotY(r.a), front: r.front, back: r.back, ok: r.okA && r.okB && !r.a.heading && !capitalized(r) }));
+    const found = rows.map((r) => ({ y: rotY(r.a), front: r.front, back: r.back, part: r.a.part, ok: r.okA && r.okB && !r.a.heading && !capitalized(r) }));
     // Losse woorden zonder vertaling: wel tonen, niet aanvinken.
     for (const s of A.segs) {
-      if (!used.has(s) && plausible(s.text, s.conf)) found.push({ y: rotY(s), front: s.text, back: '', ok: false });
+      if (!used.has(s) && plausible(s.text, s.conf)) found.push({ y: rotY(s), front: s.text, back: '', part: s.part, ok: false });
     }
     found.sort((x, y) => x.y - y.y);
+    // Kopje zonder (leesbare) letter, bv. "Flavours – Smaken": met hoofdletters in een lijst van
+    // kleine letters, en met extra ruimte erboven. Dan is het de naam van een nieuw deel.
+    found.forEach((f, k) => {
+      if (f.part || !f.back || !lower || !/^\p{Lu}/u.test(f.front) || !/^\p{Lu}/u.test(f.back)) return;
+      if (k && f.y - found[k - 1].y > spacing * 1.35) f.part = f.front.replace(/\s+/g, ' ').trim();
+    });
     // Losse regel met veel ruimte eromheen (meestal een kopje): niet aanvinken.
     const paired = found.filter((f) => f.back);
     if (paired.length >= 3) {
@@ -431,9 +439,30 @@ export function pairsFromLines(lines) {
         if (before > spacing * 2.5 && after > spacing * 2.5) f.ok = false;
       });
     }
-    out.push(...found.map(({ front, back, ok }) => ({ front, back, ok })));
+    out.push(...found.map(({ front, back, ok, part }) => ({ front, back, ok, part })));
   }
-  return out;
+  return withSections(out);
+}
+
+// Naam van een deel uit een kopje: "B  GROCERIES  Boodschappen" → "B Groceries".
+// Alleen het Engelse deel (tot een dubbele spatie of het Nederlandse kopje erachter).
+export function sectionName(text) {
+  const m = String(text).trim().match(/^([A-Z])[\s.)]+(\p{Lu}[\p{L}'’]*(?:\s\p{L}[\p{L}'’]*)*)/u);
+  if (!m) return '';
+  const title = m[2]
+    .split(/\s+/)
+    .map((w, k) => (w === w.toUpperCase() ? (k ? w.toLowerCase() : w[0] + w.slice(1).toLowerCase()) : w))
+    .join(' ');
+  return `${m[1]} ${title}`;
+}
+
+// Woordjes onder een kopje krijgen dat deel; een deel loopt door in de volgende kolom.
+function withSections(rows) {
+  let current = '';
+  return rows.map(({ part, ...row }) => {
+    if (part) current = part;
+    return current ? { ...row, section: current } : row;
+  });
 }
 
 // ---------- Gekleurde woorden in voorbeeldzinnen ----------
@@ -561,21 +590,30 @@ function robustLine(pts, tol, maxSlope, minDx) {
 
 // Tesseract-regels waarvan de woorden een vlag `hl` (gekleurd) hebben → kaartjes
 // met voorbeeldzin. Geeft null als de bladzijde niet zo is opgebouwd.
+// Staat er ook een gewone woordenlijst op (met gekleurde woordjes), dan is
+// `rows.mixed` true en bevat `rows.used` de woorden van de zinnen en hun
+// vertalingen: de rest van de bladzijde kan dan als woordenlijst gelezen worden.
 export function pairsFromHighlights(lines) {
   const words = (lines || []).flatMap((l) => l.words || []).filter((w) => w.text && w.text.trim() && w.confidence >= 20);
   if (!words.length) return null;
   const H = median(words.map((w) => w.bbox.y1 - w.bbox.y0)) || 10;
   const isHl = (w) => w.hl && /\p{L}/u.test(w.text);
   const chains = chainsOf(words, H);
-  const anchors = chains.filter((c) => c.some(isHl));
+  let anchors = chains.filter((c) => c.some(isHl));
   // Zinnen: het gekleurde woord staat tussen (veel) gewone woorden. Een
   // woordenlijst met gekleurde woordjes (en vakjes ervoor) is iets anders.
   const sentenceLike = (c) => {
     const plain = c.filter((w) => !w.hl && /\p{L}{2,}/u.test(w.text) && !isMark(w.text)).length;
     return plain >= 3 && plain >= 2 * c.filter(isHl).length;
   };
-  const nSentences = anchors.filter(sentenceLike).length;
-  if (nSentences < 3 || nSentences < anchors.length * 0.5) return null;
+  const sentences = anchors.filter(sentenceLike);
+  if (sentences.length < 3) return null;
+  // Veel losse gekleurde woordjes: een woordenlijst met daarnaast (of eronder) zinnen.
+  const mixed = sentences.length < anchors.length * 0.5;
+  if (mixed && sentences.length < 5) return null;
+  if (mixed) anchors = sentences;
+  const top = Math.min(...anchors.map((c) => c[0].bbox.y0)) - H * 3;
+  const bottom = Math.max(...anchors.map((c) => c[0].bbox.y1)) + H * 3;
   const X0 = Math.min(...words.map((w) => w.bbox.x0));
   const X1 = Math.max(...words.map((w) => w.bbox.x1));
 
@@ -589,6 +627,8 @@ export function pairsFromHighlights(lines) {
     while (k > 0 && !(isMark(c[k - 1].text) && (k < 2 || c[k - 1].bbox.x0 - c[k - 2].bbox.x1 > H * 0.6))) k--;
     const ws = k > 0 ? c.slice(k - 1) : c;
     if (ws[0].bbox.x0 < X0 + (X1 - X0) * 0.4) continue;
+    // Bij een gemengde bladzijde alleen vertalingen naast de zinnen.
+    if (mixed && (ws[0].bbox.y1 < top || ws[0].bbox.y0 > bottom)) continue;
     cands.push({ x: ws[0].bbox.x0, y: median(ws.map((w) => w.bbox.y1)), ws });
   }
   // Kolomlijn: x als functie van y.
@@ -602,7 +642,7 @@ export function pairsFromHighlights(lines) {
     if (ws.length > 1 && ws[0].text.length <= 3 && Math.abs(ws[0].bbox.x0 - colLine(d.y)) < H * 0.8) ws = ws.slice(1);
     ws = stripMarks(ws);
     const text = joinWords(ws, H).replace(/^[\s|:;,.=—_-]+|[\s|:;=—_-]+$/g, '');
-    if (/\p{L}{2,}/u.test(text)) dutch.push({ x: d.x, y: d.y, text });
+    if (/\p{L}{2,}/u.test(text)) dutch.push({ x: d.x, y: d.y, text, ws: d.ws });
   }
   if (!dutch.length) return null;
 
@@ -637,7 +677,7 @@ export function pairsFromHighlights(lines) {
       const front = groups.map((g) => bare(joinWords(g.ws, H))).filter(Boolean).join(' ');
       // Afgesneden stukje aan de rand van de foto: wel tonen, niet aanvinken.
       const cut = isHl(c[0]) && c[0].bbox.x0 > margin + H * 3;
-      return { y, right: c[c.length - 1].bbox.x1, front, example: cleanSentence(joinWords(c, H)), cut };
+      return { y, y0, right: c[c.length - 1].bbox.x1, front, example: cleanSentence(joinWords(c, H)), cut };
     })
     .filter((a) => a.front)
     .sort((a, b) => a.y - b.y);
@@ -702,10 +742,22 @@ export function pairsFromHighlights(lines) {
     }
     i = e;
   }
-  return items.map((a) => {
+  // Kopjes als "A WATCHING": elke zin hoort bij het dichtstbijzijnde kopje erboven.
+  const heads = chains
+    .filter((c) => c.length <= 5 && !c.some(isHl))
+    .map((c) => ({ y: median(c.map((w) => w.bbox.y1)), name: sectionName(joinWords(c, H)) }))
+    .filter((h) => h.name)
+    .sort((p, q) => p.y - q.y);
+  const sectionAt = (y) => heads.filter((h) => h.y < y).pop()?.name || '';
+  const rows = items.map((a) => {
     const d = back.get(a);
-    return { front: a.front, back: d ? d.text : '', example: a.example, ok: !!d && !a.cut && plausible(a.front) };
+    const row = { front: a.front, back: d ? d.text : '', example: a.example, ok: !!d && !a.cut && plausible(a.front) };
+    const section = sectionAt(a.y0);
+    return section ? { ...row, section } : row;
   });
+  rows.mixed = mixed;
+  rows.used = new Set([...anchors.flat(), ...dutch.flatMap((d) => d.ws)]);
+  return rows;
 }
 
 // Waar staat het woord (of de woordgroep) in de voorbeeldzin? Geeft [begin, eind]-stukken.

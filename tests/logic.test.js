@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { newState, schedule, AGAIN, HARD, GOOD, EASY, MINUTE, DAY, DEFAULTS, previewLabels, capState } from '../js/srs.js';
 import { checkAnswer, normalize } from '../js/check.js';
-import { pairsFromText, pairsFromLines, plausible, pairsFromHighlights, highlightInk, findInSentence } from '../js/parse.js';
-import { Session, countDue, nextVariant, dirsFor, addVariants, needsMoreVariants } from '../js/session.js';
+import { pairsFromText, pairsFromLines, plausible, pairsFromHighlights, highlightInk, findInSentence, sectionName } from '../js/parse.js';
+import { Session, countDue, nextVariant, dirsFor, addVariants, needsMoreVariants, sectionOf, sectionList } from '../js/session.js';
 
 const NOW = new Date('2026-10-02T15:00:00').getTime();
 
@@ -439,4 +439,33 @@ test('herhalingen nooit verder dan 6 dagen vooruit', () => {
   assert.ok(old.due <= NOW + 6 * DAY);
   assert.equal(capState(old, NOW), false, 'tweede keer niets meer te doen');
   assert.equal(capState(newState(), NOW), false);
+});
+
+test('delen van het boek: kopjes herkennen en woordjes indelen', () => {
+  assert.equal(sectionName('B  Groceries'), 'B Groceries');
+  assert.equal(sectionName('A WATCHING'), 'A Watching');
+  assert.equal(sectionName('B In the kitchen'), 'B In the kitchen');
+  assert.equal(sectionName('THEME WORDS'), '');
+  assert.equal(sectionName('biscuits'), '');
+  // Kopje met letter, daaronder woordjes; het tweede kopje begint een nieuw deel.
+  const rows = pairsFromLines(
+    fakeOcr([
+      ['B Groceries', 100, 0], ['Boodschappen', 600, 0],
+      ['biscuits', 100, 1], ['koekjes', 600, 1],
+      ['cereal', 100, 2], ['ontbijtgranen', 600, 2],
+      ['milk', 100, 3], ['melk', 600, 3],
+      ['D Flavours', 100, 5], ['Smaken', 600, 5],
+      ['awful', 100, 6], ['verschrikkelijk', 600, 6],
+      ['sour', 100, 7], ['zuur', 600, 7],
+    ])
+  );
+  const by = Object.fromEntries(rows.filter((r) => r.ok).map((r) => [r.front, r.section]));
+  assert.equal(by.biscuits, 'B Groceries');
+  assert.equal(by.milk, 'B Groceries');
+  assert.equal(by.awful, 'D Flavours');
+  assert.equal(by.sour, 'D Flavours');
+  // Volgorde voor de keuze bij overhoren: A, B, … dan Stones, dan "zonder deel".
+  const cards = [{ section: 'D Flavours' }, {}, { kind: 'stone', stone: 'Stone 3' }, { section: 'A Watching' }, { section: 'B Groceries' }];
+  assert.deepEqual(sectionList(cards), ['A Watching', 'B Groceries', 'D Flavours', '📘 Stone 3', '']);
+  assert.equal(sectionOf({ kind: 'stone', stone: 'Stone 3', section: 'x' }), '📘 Stone 3');
 });

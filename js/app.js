@@ -1,6 +1,6 @@
 import * as db from './db.js';
 import { previewLabels, AGAIN, HARD, GOOD, EASY, formatMs, capState } from './srs.js';
-import { Session, countDue, nextVariant, needsMoreVariants, addVariants } from './session.js';
+import { Session, countDue, nextVariant, needsMoreVariants, addVariants, sectionOf, sectionList } from './session.js';
 import { checkAnswer, normalize, oneLetterOff } from './check.js';
 import { pairsFromText, findInSentence } from './parse.js';
 import { loadImage, toCanvas, canvasToBase64Jpeg, isHeic, isImageFile } from './image.js';
@@ -202,8 +202,13 @@ async function homeView() {
 // ---------- Deck ----------
 
 async function deckView(deck) {
-  const cards = (await db.listCards(deck.id)).sort((a, b) => b.created - a.created);
+  const sections = sectionList(await db.listCards(deck.id));
+  // Per deel (boekvolgorde), daarbinnen het nieuwste bovenaan.
+  const cards = (await db.listCards(deck.id)).sort(
+    (a, b) => sections.indexOf(sectionOf(a)) - sections.indexOf(sectionOf(b)) || b.created - a.created
+  );
   const c = countDue(cards, ['fwd', 'rev']);
+  const grouped = sections.length > 1 || sections[0];
   const langOpts = (sel) =>
     Object.entries(LANGS)
       .map(([k, v]) => `<option value="${k}" ${k === sel ? 'selected' : ''}>${v}</option>`)
@@ -234,24 +239,31 @@ async function deckView(deck) {
         <input id="search" type="search" placeholder="Zoeken…">
       </div>
       <table class="cards">
-        <thead><tr><th>${esc(LANGS[deck.frontLang])}</th><th>${esc(LANGS[deck.backLang])}</th><th>Volgende keer</th><th></th></tr></thead>
+        <thead><tr><th>${esc(LANGS[deck.frontLang])}</th><th>${esc(LANGS[deck.backLang])}</th><th class="sec-col">Deel</th><th class="next-col">Volgende keer</th><th></th></tr></thead>
         <tbody>
         ${cards
           .map(
-            (card) => `
+            (card, i) => `
+          ${
+            grouped && (i === 0 || sectionOf(card) !== sectionOf(cards[i - 1]))
+              ? `<tr class="sec-head"><th colspan="5">${esc(sectionOf(card) || 'Zonder deel')} <small class="muted">(${cards.filter((x) => sectionOf(x) === sectionOf(card)).length})</small></th></tr>`
+              : ''
+          }
           <tr data-id="${card.id}">
             ${
               card.kind === 'stone'
                 ? `<td class="stone-cell"><span class="badge">📘 ${esc(STONE_TYPES[card.type])}</span> ${esc(card.front)}</td><td class="stone-cell">${esc(card.back)} <small class="muted">(${card.variants.length} varianten)</small></td>`
                 : `<td><input class="f" value="${esc(card.front)}">${card.example ? `<small class="example muted">${exampleHtml(card.example, card.front)}</small>` : ''}</td><td><input class="b" value="${esc(card.back)}"></td>`
             }
-            <td class="muted">${nextLabel(card)}</td>
+            <td class="sec-col">${card.kind === 'stone' ? '' : `<input class="s" list="secList" value="${esc(card.section || '')}" placeholder="Deel">`}</td>
+            <td class="muted next-col">${nextLabel(card)}</td>
             <td><button class="icon del" title="Verwijderen">✕</button></td>
           </tr>`
           )
           .join('')}
         </tbody>
       </table>
+      ${secDatalist(sections)}
       ${cards.length ? '' : '<p class="muted">Nog geen woordjes. Voeg ze toe met een foto of door ze te typen.</p>'}
     </section>
     <section class="panel">
@@ -271,8 +283,13 @@ async function deckView(deck) {
     const card = byId[tr.dataset.id];
     card.front = tr.querySelector('.f').value.trim();
     card.back = tr.querySelector('.b').value.trim();
+    const section = tr.querySelector('.s').value.trim();
+    if (section) card.section = section;
+    else delete card.section;
     await db.putCards([card]);
     toast('Opgeslagen', 'ok');
+    // Ander deel: lijst opnieuw groeperen.
+    if (e.target.classList.contains('s')) route();
   });
   tbody.addEventListener('click', async (e) => {
     if (!e.target.classList.contains('del')) return;
@@ -284,6 +301,7 @@ async function deckView(deck) {
     const q = normalize(e.target.value);
     for (const tr of tbody.rows) {
       const card = byId[tr.dataset.id];
+      if (!card) continue; // kopje van een deel
       tr.hidden = q && !normalize(`${card.front} ${card.back}`).includes(q);
     }
   };
@@ -342,6 +360,11 @@ function exampleHtml(sentence, word, hide = false) {
   return html + esc(sentence.slice(pos));
 }
 
+// Keuzelijst met de delen die al bestaan (voor de invulvelden "Deel").
+function secDatalist(sections) {
+  return `<datalist id="secList">${sections.filter((s) => s && !s.startsWith('📘')).map((s) => `<option value="${esc(s)}">`).join('')}</datalist>`;
+}
+
 function reviewTable(deck, rows, existing) {
   const known = new Set(existing.map((c) => normalize(c.front)));
   for (const r of rows) {
@@ -361,8 +384,14 @@ function reviewTable(deck, rows, existing) {
         </div>
       </div>
       <p class="muted">Vink uit wat je niet wilt leren en verbeter fouten. Grijze regels konden niet automatisch gesplitst worden of staan al in dit hoofdstuk.</p>
+      <p class="muted small">Bij <b>Deel</b> staat uit welk stuk van het boek het woord komt (bv. <i>B Groceries</i>); daarmee kies je later wat je oefent.</p>
+      <div class="row">
+        <input id="bulkSec" list="secList" placeholder="Deel, bv. B Groceries">
+        <button type="button" class="setsec">Invullen bij aangevinkte regels zonder deel</button>
+      </div>
+      ${secDatalist(sectionList([...existing, ...rows]))}
       <table class="cards review">
-        <thead><tr><th></th><th>${esc(LANGS[deck.frontLang])}</th><th>${esc(LANGS[deck.backLang])}</th><th></th></tr></thead>
+        <thead><tr><th></th><th>${esc(LANGS[deck.frontLang])}</th><th>${esc(LANGS[deck.backLang])}</th><th class="sec-col">Deel</th><th></th></tr></thead>
         <tbody>
           ${rows
             .map(
@@ -371,6 +400,7 @@ function reviewTable(deck, rows, existing) {
               <td><input type="checkbox" class="ok" ${r.ok ? 'checked' : ''}></td>
               <td><input class="f" value="${esc(r.front)}">${r.example ? `<small class="example muted">${exampleHtml(r.example, r.front)}</small>` : ''}</td>
               <td><input class="b" value="${esc(r.back)}">${r.dup ? '<small class="muted">staat er al in</small>' : ''}</td>
+              <td class="sec-col"><input class="s" list="secList" value="${esc(r.section || '')}" placeholder="Deel"></td>
               <td><button type="button" class="icon del" title="Weghalen">✕</button></td>
             </tr>`
             )
@@ -388,6 +418,7 @@ function reviewTable(deck, rows, existing) {
     const r = rows[tr.dataset.i];
     if (e.target.classList.contains('ok')) r.ok = e.target.checked;
     if (e.target.classList.contains('f')) r.front = e.target.value;
+    if (e.target.classList.contains('s')) r.section = e.target.value;
     if (e.target.classList.contains('b')) {
       r.back = e.target.value;
       if (r.back.trim() && !r.dup) r.ok = true;
@@ -407,13 +438,19 @@ function reviewTable(deck, rows, existing) {
     } else if (t.classList.contains('swap')) {
       for (const r of rows) [r.front, r.back] = [r.back, r.front];
       draw();
+    } else if (t.classList.contains('setsec')) {
+      const section = box.querySelector('#bulkSec').value.trim();
+      if (!section) return toast('Typ eerst de naam van het deel.', 'bad');
+      for (const r of rows) if (r.ok && !(r.section || '').trim()) r.section = section;
+      draw();
     } else if (t.classList.contains('addrow')) {
-      rows.push({ front: '', back: '', ok: true, dup: false });
+      const last = rows[rows.length - 1];
+      rows.push({ front: '', back: '', ok: true, dup: false, section: last ? last.section : '' });
       draw();
       box.querySelector('tbody tr:last-child .f').focus();
     } else if (t.classList.contains('save')) {
       const keep = rows.filter((r) => r.ok && r.front.trim() && r.back.trim());
-      await db.putCards(keep.map((r) => db.makeCard(deck.id, r.front.trim(), r.back.trim(), r.example)));
+      await db.putCards(keep.map((r) => db.makeCard(deck.id, r.front.trim(), r.back.trim(), r.example, r.section)));
       toast(`${keep.length} kaartjes toegevoegd`, 'ok');
       location.hash = `#/deck/${deck.id}`;
     }
@@ -775,6 +812,9 @@ async function studySetupView(deck) {
   const { newPerDay } = await settings.get();
   const newLeft = await newLeftToday(deck.id, newPerDay);
   const last = await db.getMeta(`study:${deck.id}`, { mode: 'flip', dir: 'fwd' });
+  // Delen die je níet wilt oefenen (zo staan nieuwe delen vanzelf aan).
+  const skip = new Set(last.skip || []);
+  const sections = sectionList(cards);
   const f = LANGS[deck.frontLang];
   const b = LANGS[deck.backLang];
 
@@ -790,6 +830,20 @@ async function studySetupView(deck) {
           <label class="choice"><input type="radio" name="mode" value="type" ${last.mode === 'type' ? 'checked' : ''}>
             <span><b>Intypen</b><br><small>Typ het antwoord; de app controleert het.</small></span></label>
         </fieldset>
+        ${
+          sections.length > 1
+            ? `<fieldset class="sections">
+          <legend>Welke delen?</legend>
+          ${sections
+            .map((s) => {
+              const n = cards.filter((c) => sectionOf(c) === s).length;
+              return `<label class="choice"><input type="checkbox" name="sec" value="${esc(s)}" ${skip.has(s) ? '' : 'checked'}><span>${esc(s || 'Zonder deel')} <small class="muted">(${n})</small></span></label>`;
+            })
+            .join('')}
+          <div class="row"><button type="button" id="secAll" class="link">Alles aan</button><button type="button" id="secNone" class="link">Alles uit</button></div>
+        </fieldset>`
+            : ''
+        }
         <fieldset>
           <legend>Richting</legend>
           <label class="choice"><input type="radio" name="dir" value="fwd" ${last.dir === 'fwd' ? 'checked' : ''}><span>${esc(f)} → ${esc(b)}</span></label>
@@ -805,7 +859,18 @@ async function studySetupView(deck) {
     </section>`);
 
   const form = document.getElementById('setup');
+  const secBoxes = [...form.querySelectorAll('input[name=sec]')];
+  const chosen = () => (secBoxes.length ? cards.filter((c) => secBoxes.some((b) => b.checked && b.value === sectionOf(c))) : cards);
+  const setAll = (on) => {
+    secBoxes.forEach((b) => (b.checked = on));
+    update();
+  };
+  if (secBoxes.length) {
+    document.getElementById('secAll').onclick = () => setAll(true);
+    document.getElementById('secNone').onclick = () => setAll(false);
+  }
   const update = () => {
+    const cards = chosen();
     const c = countDue(cards, DIRS[form.dir.value]);
     const fresh = Math.min(c.fresh, newLeft);
     document.getElementById('summary').innerHTML = form.cram.checked
@@ -817,9 +882,11 @@ async function studySetupView(deck) {
   update();
   form.onsubmit = async (e) => {
     e.preventDefault();
-    const opts = { mode: form.mode.value, dir: form.dir.value };
+    const picked = chosen();
+    if (!picked.length) return toast('Kies minstens één deel.', 'bad');
+    const opts = { mode: form.mode.value, dir: form.dir.value, skip: secBoxes.filter((b) => !b.checked).map((b) => b.value) };
     await db.setMeta(`study:${deck.id}`, opts);
-    studyView(deck, cards, { ...opts, cram: form.cram.checked, newLeft });
+    studyView(deck, picked, { ...opts, cram: form.cram.checked, newLeft });
   };
 }
 

@@ -92,9 +92,11 @@ export const listCards = (deckId) =>
 export const allCards = () => tx(['cards'], 'readonly', (t) => wrap(t.objectStore('cards').getAll()));
 
 // example: voorbeeldzin uit het boek waarin het woord staat (optioneel).
-export function makeCard(deckId, front, back, example = '') {
+// section: deel van het boek waar het woord staat, bv. "B Groceries" (optioneel).
+export function makeCard(deckId, front, back, example = '', section = '') {
   const card = { id: uid(), deckId, front, back, created: Date.now(), fwd: newState(), rev: newState() };
   if (example && example.trim()) card.example = example.trim();
+  if (section && section.trim()) card.section = section.trim();
   return card;
 }
 

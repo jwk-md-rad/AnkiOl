@@ -295,7 +295,8 @@ kbd { font-size: 0.7rem; opacity: 0.7; border: 1px solid currentColor; border-ra
   main { padding: 10px; }
   .panel { padding: 14px; }
   .rates { grid-template-columns: repeat(2, 1fr); }
-  table.cards td:nth-child(3).muted, table.cards th:nth-child(3) { display: none; }
+  /* Smal scherm: geen kolommen voor deel en volgende keer (het deel staat al als kopje boven de woordjes). */
+  table.cards .next-col, table.cards .sec-col { display: none; }
 }
 
 /* Voorbeeldzin bij een woordje (woord in het oranje, zoals in het boek) */
@@ -308,3 +309,8 @@ small.example { display: block; text-align: left; font-size: 0.8rem; margin: 0.2
 
 /* Nieuwe versie beschikbaar */
 .update-bar { display: block; width: 100%; border: 0; border-radius: 0; padding: 10px 16px; background: var(--primary); color: #fff; font-size: 0.95rem; text-align: center; cursor: pointer; }
+
+/* Delen van het boek (bv. "B Groceries") */
+tr.sec-head th { padding-top: 14px; font-size: 0.95rem; color: var(--text); border-bottom: 2px solid var(--line); }
+input.s { min-width: 7em; }
+.sections .row { gap: 12px; }
